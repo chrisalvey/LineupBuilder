@@ -91,7 +91,45 @@ function parseCSV(csv) {
         }
     }
 
+    calculatePlayerValues();
     displayPlayers();
+}
+
+function calculatePlayerValues() {
+    // Calculate PPK (Points Per $1K) for each player
+    players.forEach(player => {
+        const avgPoints = parseFloat(player.AvgPointsPerGame) || 0;
+        const salary = parseInt(player.Salary) || 1;
+
+        // Calculate Points Per $1,000
+        player.ppk = avgPoints > 0 ? (avgPoints / salary) * 1000 : 0;
+    });
+
+    // Group players by position and find top 25% threshold for each position
+    const positionGroups = {};
+
+    players.forEach(player => {
+        const pos = player.Position;
+        if (!positionGroups[pos]) {
+            positionGroups[pos] = [];
+        }
+        positionGroups[pos].push(player.ppk);
+    });
+
+    // Calculate 75th percentile (top 25%) for each position
+    const positionThresholds = {};
+
+    Object.keys(positionGroups).forEach(pos => {
+        const ppkValues = positionGroups[pos].sort((a, b) => b - a);
+        const index = Math.floor(ppkValues.length * 0.25);
+        positionThresholds[pos] = ppkValues[index] || 0;
+    });
+
+    // Mark players that are in top 25% for their position
+    players.forEach(player => {
+        const threshold = positionThresholds[player.Position] || 0;
+        player.isTopValue = player.ppk >= threshold && player.ppk > 0;
+    });
 }
 
 function displayPlayers() {
@@ -119,16 +157,24 @@ function displayPlayers() {
         const avgPts = player.AvgPointsPerGame ? parseFloat(player.AvgPointsPerGame).toFixed(1) : '-';
         const gameInfo = player['Game Info'] ? player['Game Info'].split(' ')[0] : '';
 
+        // Value indicators
+        const ppkValue = player.ppk > 0 ? player.ppk.toFixed(2) : 'N/A';
+        const starIcon = player.isTopValue ? '<span class="value-star">⭐</span>' : '';
+        const valueClass = player.isTopValue ? 'value-excellent' : '';
+
         return `
-            <div class="player-item" onclick="addPlayerToLineup(${index})">
-                <div class="player-name">${player.Name}</div>
+            <div class="player-item ${valueClass}" onclick="addPlayerToLineup(${index})">
+                <div class="player-name">${player.Name} ${starIcon}</div>
                 <div class="player-details">
                     <span>${player.TeamAbbrev || ''} - ${player.Position}</span>
                     <span class="player-avg">${avgPts} avg</span>
                 </div>
                 <div class="player-details">
-                    <span class="player-game">${gameInfo}</span>
+                    <span class="player-value">${ppkValue} PPK</span>
                     <span class="player-salary">$${salary.toLocaleString()}</span>
+                </div>
+                <div class="player-details">
+                    <span class="player-game">${gameInfo}</span>
                 </div>
             </div>
         `;

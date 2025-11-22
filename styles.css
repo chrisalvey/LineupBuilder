@@ -187,6 +187,27 @@ body {
     color: #999;
 }
 
+.player-value {
+    font-weight: 600;
+    color: #ff6b6b;
+    font-size: 0.9em;
+}
+
+.value-star {
+    font-size: 1em;
+    margin-left: 5px;
+}
+
+.value-excellent {
+    background: #fff8e1 !important;
+    border-color: #ffd700 !important;
+}
+
+.value-excellent:hover {
+    background: #fff3cd !important;
+    border-color: #ffc107 !important;
+}
+
 .current-lineup h2 {
     margin-bottom: 20px;
     color: #333;
