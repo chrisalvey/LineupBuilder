@@ -378,6 +378,142 @@ body {
     margin-left: 5px;
 }
 
+.find-picks-btn {
+    padding: 8px 16px;
+    background: #667eea;
+    color: white;
+    border: none;
+    border-radius: 5px;
+    font-size: 0.95em;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.3s;
+    white-space: nowrap;
+}
+
+.find-picks-btn:hover {
+    background: #5568d3;
+}
+
+.find-picks-btn:disabled {
+    background: #6c757d;
+    cursor: not-allowed;
+}
+
+.recommendations-section {
+    background: #f8f9fa;
+    border-radius: 8px;
+    padding: 20px;
+    margin-top: 20px;
+}
+
+.recommendations-section h3 {
+    margin-bottom: 15px;
+    color: #333;
+    font-size: 1.2em;
+}
+
+.rec-category {
+    margin-bottom: 20px;
+}
+
+.rec-category:last-child {
+    margin-bottom: 0;
+}
+
+.rec-category h4 {
+    margin-bottom: 12px;
+    color: #555;
+    font-size: 1.1em;
+}
+
+.rec-item {
+    background: white;
+    border-radius: 5px;
+    padding: 12px;
+    margin-bottom: 8px;
+    cursor: pointer;
+    transition: all 0.3s;
+    border-left: 4px solid transparent;
+}
+
+.rec-item:hover {
+    transform: translateX(3px);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.rec-value {
+    border-left-color: #28a745;
+}
+
+.rec-value:hover {
+    background: #f0fff4;
+}
+
+.rec-stud {
+    border-left-color: #ff6b6b;
+}
+
+.rec-stud:hover {
+    background: #fff5f5;
+}
+
+.rec-player {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 5px;
+    flex-wrap: wrap;
+}
+
+.rec-star {
+    font-size: 1.1em;
+}
+
+.rec-player strong {
+    color: #333;
+    font-size: 1.05em;
+}
+
+.rec-details {
+    color: #666;
+    font-size: 0.85em;
+    margin-left: auto;
+}
+
+.rec-source {
+    font-size: 0.8em;
+    color: #999;
+    font-style: italic;
+    margin-left: 28px;
+}
+
+.rec-source a {
+    color: #667eea;
+    text-decoration: none;
+}
+
+.rec-source a:hover {
+    text-decoration: underline;
+}
+
+.in-lineup-badge {
+    background: #667eea;
+    color: white;
+    padding: 2px 8px;
+    border-radius: 3px;
+    font-size: 0.75em;
+    font-weight: bold;
+    margin-left: 5px;
+}
+
+.no-recs {
+    text-align: center;
+    color: #999;
+    padding: 30px;
+    font-style: italic;
+}
+
 @media (max-width: 768px) {
     .lineup-container {
         grid-template-columns: 1fr;

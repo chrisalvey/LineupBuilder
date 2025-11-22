@@ -6,6 +6,7 @@ let contestType = 'classic';
 let salaryCap = 50000;
 let currentSort = 'salary-high';
 let injuryData = {};
+let recommendations = {};
 
 // Contest configurations based on official DraftKings rules
 const contestConfigs = {
@@ -451,5 +452,259 @@ async function checkESPNStatus(playerName, team) {
         return 'CHECK';
     } catch (error) {
         return 'UNKNOWN';
+    }
+}
+
+async function findRecommendations() {
+    if (players.length === 0) {
+        alert('Please upload a player CSV first');
+        return;
+    }
+
+    const btn = document.getElementById('findPicksBtn');
+    btn.disabled = true;
+    btn.textContent = 'Searching...';
+
+    // Get current week number (approximate)
+    const now = new Date();
+    const weekNumber = Math.ceil((now.getDate()) / 7);
+
+    // Determine position for search
+    let searchPosition = currentPosition;
+    const positionNames = {
+        'QB': 'Quarterback',
+        'RB': 'Running Back',
+        'WR': 'Wide Receiver',
+        'TE': 'Tight End',
+        'K': 'Kicker',
+        'DST': 'Defense'
+    };
+
+    const positionName = positionNames[searchPosition] || searchPosition;
+
+    try {
+        const valuePicks = await searchExpertPicks(searchPosition, positionName, weekNumber, 'value');
+        const studPicks = await searchExpertPicks(searchPosition, positionName, weekNumber, 'stud');
+
+        recommendations[currentPosition] = {
+            value: valuePicks,
+            stud: studPicks,
+            position: searchPosition
+        };
+
+        displayRecommendations();
+    } catch (error) {
+        console.error('Error finding recommendations:', error);
+        alert('Unable to fetch recommendations. Please try again.');
+    }
+
+    btn.disabled = false;
+    btn.textContent = 'Find Expert Picks';
+}
+
+async function searchExpertPicks(position, positionName, week, type) {
+    const queries = type === 'value' ? [
+        `DraftKings value picks ${positionName} week ${week} 2025`,
+        `${positionName} sleepers DFS this week`,
+        `cheap ${positionName} plays DraftKings`
+    ] : [
+        `top ${positionName} plays DraftKings week ${week}`,
+        `must-start ${positionName} DFS this week`,
+        `best ${positionName} DraftKings lineup 2025`
+    ];
+
+    const allResults = [];
+
+    for (const query of queries) {
+        try {
+            const url = `https://api.duckduckgo.com/?q=${encodeURIComponent(query)}&format=json&no_html=1`;
+            const response = await fetch(url);
+            const data = await response.json();
+
+            // Extract player names from results
+            const results = extractPlayerNames(data, position);
+            allResults.push(...results);
+        } catch (error) {
+            console.error('Search error:', error);
+        }
+    }
+
+    // Deduplicate and limit to 5
+    const unique = Array.from(new Set(allResults.map(r => r.playerName)))
+        .slice(0, 5)
+        .map(name => allResults.find(r => r.playerName === name));
+
+    return unique;
+}
+
+function extractPlayerNames(searchData, position) {
+    const results = [];
+    const text = (searchData.AbstractText || '') + ' ' +
+                 (searchData.Answer || '') + ' ' +
+                 (searchData.Abstract || '');
+
+    // Get related topics which often contain player info
+    const topics = searchData.RelatedTopics || [];
+
+    topics.forEach(topic => {
+        const topicText = (topic.Text || '') + ' ' + (topic.FirstURL || '');
+        const source = topic.FirstURL || 'Expert Source';
+        const sourceTitle = topic.Text ? topic.Text.substring(0, 60) + '...' : 'Expert Analysis';
+
+        // Match names against player pool
+        players.forEach(player => {
+            if (player.Position === position ||
+                (position === 'FLEX' && ['RB', 'WR', 'TE'].includes(player.Position))) {
+
+                // Check if player name appears in the text
+                if (topicText.toLowerCase().includes(player.Name.toLowerCase())) {
+                    const alreadyInLineup = Object.values(currentLineup)
+                        .some(p => p.id === player.ID);
+
+                    results.push({
+                        playerName: player.Name,
+                        playerId: player.ID,
+                        salary: parseInt(player.Salary),
+                        ppk: player.ppk || 0,
+                        team: player.TeamAbbrev || '',
+                        position: player.Position,
+                        avgPoints: player.AvgPointsPerGame || '0',
+                        inLineup: alreadyInLineup,
+                        source: sourceTitle,
+                        sourceUrl: source
+                    });
+                }
+            }
+        });
+    });
+
+    return results;
+}
+
+function displayRecommendations() {
+    const section = document.getElementById('recommendationsSection');
+    const content = document.getElementById('recommendationsContent');
+    const title = document.getElementById('recommendationsTitle');
+
+    const recs = recommendations[currentPosition];
+    if (!recs) {
+        section.style.display = 'none';
+        return;
+    }
+
+    const positionLabels = {
+        'QB': 'Quarterback',
+        'RB': 'Running Back',
+        'WR': 'Wide Receiver',
+        'TE': 'Tight End',
+        'K': 'Kicker',
+        'DST': 'Defense',
+        'FLEX': 'Flex',
+        'ALL': 'All Positions'
+    };
+
+    title.textContent = `📊 Expert Recommendations for ${positionLabels[recs.position]}`;
+
+    let html = '';
+
+    // Value Picks
+    if (recs.value && recs.value.length > 0) {
+        html += '<div class="rec-category"><h4>💰 Value Picks (Budget-Friendly)</h4>';
+        recs.value.forEach(pick => {
+            const ppkDisplay = pick.ppk > 0 ? pick.ppk.toFixed(2) + ' PPK' : 'N/A';
+            const lineupBadge = pick.inLineup ? '<span class="in-lineup-badge">In Lineup ✓</span>' : '';
+
+            html += `
+                <div class="rec-item rec-value" onclick="addPlayerByName('${pick.playerName}')">
+                    <div class="rec-player">
+                        <span class="rec-star">⭐</span>
+                        <strong>${pick.playerName}</strong> ${lineupBadge}
+                        <span class="rec-details">${pick.team} ${pick.position} - $${pick.salary.toLocaleString()} | ${ppkDisplay}</span>
+                    </div>
+                    <div class="rec-source">
+                        Source: <a href="${pick.sourceUrl}" target="_blank" onclick="event.stopPropagation()">${pick.source}</a>
+                    </div>
+                </div>
+            `;
+        });
+        html += '</div>';
+    }
+
+    // Stud Picks
+    if (recs.stud && recs.stud.length > 0) {
+        html += '<div class="rec-category"><h4>🏆 Stud Picks (Premium Options)</h4>';
+        recs.stud.forEach(pick => {
+            const ppkDisplay = pick.ppk > 0 ? pick.ppk.toFixed(2) + ' PPK' : 'N/A';
+            const lineupBadge = pick.inLineup ? '<span class="in-lineup-badge">In Lineup ✓</span>' : '';
+
+            html += `
+                <div class="rec-item rec-stud" onclick="addPlayerByName('${pick.playerName}')">
+                    <div class="rec-player">
+                        <span class="rec-star">🔥</span>
+                        <strong>${pick.playerName}</strong> ${lineupBadge}
+                        <span class="rec-details">${pick.team} ${pick.position} - $${pick.salary.toLocaleString()} | ${ppkDisplay}</span>
+                    </div>
+                    <div class="rec-source">
+                        Source: <a href="${pick.sourceUrl}" target="_blank" onclick="event.stopPropagation()">${pick.source}</a>
+                    </div>
+                </div>
+            `;
+        });
+        html += '</div>';
+    }
+
+    if (!html) {
+        html = '<p class="no-recs">No recommendations found for this position. Try another position or search again later.</p>';
+    }
+
+    content.innerHTML = html;
+    section.style.display = 'block';
+}
+
+function addPlayerByName(playerName) {
+    const player = players.find(p => p.Name === playerName);
+    if (!player) return;
+
+    // Check if already in lineup
+    const alreadyInLineup = Object.values(currentLineup).some(p => p.id === player.ID);
+    if (alreadyInLineup) {
+        alert('This player is already in your lineup');
+        return;
+    }
+
+    // Find the filtered index for addPlayerToLineup function
+    const config = contestConfigs[contestType];
+    const filteredPlayers = players.filter(p => {
+        if (currentPosition === 'ALL') return true;
+        if (currentPosition === 'FLEX') {
+            return config.flexEligible.includes(p.Position);
+        }
+        return p.Position === currentPosition;
+    });
+
+    // Sort to match current display
+    switch(currentSort) {
+        case 'salary-high':
+            filteredPlayers.sort((a, b) => parseInt(b.Salary) - parseInt(a.Salary));
+            break;
+        case 'salary-low':
+            filteredPlayers.sort((a, b) => parseInt(a.Salary) - parseInt(b.Salary));
+            break;
+        case 'avg-high':
+            filteredPlayers.sort((a, b) => {
+                const aAvg = parseFloat(a.AvgPointsPerGame) || 0;
+                const bAvg = parseFloat(b.AvgPointsPerGame) || 0;
+                return bAvg - aAvg;
+            });
+            break;
+        case 'ppk-high':
+            filteredPlayers.sort((a, b) => (b.ppk || 0) - (a.ppk || 0));
+            break;
+    }
+
+    const index = filteredPlayers.findIndex(p => p.Name === playerName);
+    if (index >= 0) {
+        addPlayerToLineup(index);
+        displayRecommendations(); // Refresh to show "In Lineup" badge
     }
 }
