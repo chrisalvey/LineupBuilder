@@ -348,7 +348,14 @@ function updateSalaryDisplay() {
     const totalSalary = Object.values(currentLineup).reduce((sum, player) => sum + player.salary, 0);
     const remaining = salaryCap - totalSalary;
 
+    // Calculate remaining slots and average remaining per player
+    const totalSlots = contestConfigs[contestType].positions.length;
+    const filledSlots = Object.keys(currentLineup).length;
+    const remainingSlots = totalSlots - filledSlots;
+    const avgRemaining = remainingSlots > 0 ? Math.floor(remaining / remainingSlots) : 0;
+
     document.getElementById('salaryUsed').textContent = `$${totalSalary.toLocaleString()}`;
     document.getElementById('salaryRemaining').textContent = `$${remaining.toLocaleString()}`;
     document.getElementById('salaryRemaining').style.color = remaining < 0 ? '#dc3545' : '#667eea';
+    document.getElementById('avgRemaining').textContent = `$${avgRemaining.toLocaleString()}`;
 }
