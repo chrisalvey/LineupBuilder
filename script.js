@@ -6,6 +6,7 @@ let contestType = 'classic';
 let salaryCap = 50000;
 let currentSort = 'salary-high';
 let gameOdds = {};
+const ODDS_API_KEY = '98134e3b5435f11219c586ef3dcc3f87';
 
 // Contest configurations based on official DraftKings rules
 const contestConfigs = {
@@ -28,7 +29,6 @@ document.addEventListener('DOMContentLoaded', function() {
     initializeEventListeners();
     updatePositionTabs();
     initializeLineupSlots();
-    loadApiKey();
 });
 
 function initializeEventListeners() {
@@ -373,34 +373,10 @@ function updateSalaryDisplay() {
     document.getElementById('avgRemaining').textContent = `$${avgRemaining.toLocaleString()}`;
 }
 
-// API Key Management
-function loadApiKey() {
-    const apiKey = localStorage.getItem('oddsApiKey');
-    if (apiKey) {
-        document.getElementById('oddsApiKey').value = apiKey;
-    }
-
-    // Save API key when changed
-    document.getElementById('oddsApiKey').addEventListener('change', function(e) {
-        const key = e.target.value.trim();
-        if (key) {
-            localStorage.setItem('oddsApiKey', key);
-        } else {
-            localStorage.removeItem('oddsApiKey');
-        }
-    });
-}
-
 // Fetch odds from The Odds API
 async function fetchGameOdds() {
-    const apiKey = document.getElementById('oddsApiKey').value.trim();
-    if (!apiKey) {
-        console.log('No API key provided - skipping odds fetch');
-        return;
-    }
-
     try {
-        const url = `https://api.the-odds-api.com/v4/sports/americanfootball_nfl/odds/?apiKey=${apiKey}&regions=us&markets=spreads,totals&oddsFormat=american`;
+        const url = `https://api.the-odds-api.com/v4/sports/americanfootball_nfl/odds/?apiKey=${ODDS_API_KEY}&regions=us&markets=spreads,totals&oddsFormat=american`;
 
         const response = await fetch(url);
         if (!response.ok) {
