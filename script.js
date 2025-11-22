@@ -112,7 +112,7 @@ function calculatePlayerValues() {
         player.ppk = avgPoints > 0 ? (avgPoints / salary) * 1000 : 0;
     });
 
-    // Group players by position and find top 25% threshold for each position
+    // Group players by position and find top 10% threshold for each position
     const positionGroups = {};
 
     players.forEach(player => {
@@ -123,16 +123,16 @@ function calculatePlayerValues() {
         positionGroups[pos].push(player.ppk);
     });
 
-    // Calculate 75th percentile (top 25%) for each position
+    // Calculate 90th percentile (top 10%) for each position
     const positionThresholds = {};
 
     Object.keys(positionGroups).forEach(pos => {
         const ppkValues = positionGroups[pos].sort((a, b) => b - a);
-        const index = Math.floor(ppkValues.length * 0.25);
+        const index = Math.floor(ppkValues.length * 0.10);
         positionThresholds[pos] = ppkValues[index] || 0;
     });
 
-    // Mark players that are in top 25% for their position
+    // Mark players that are in top 10% for their position
     players.forEach(player => {
         const threshold = positionThresholds[player.Position] || 0;
         player.isTopValue = player.ppk >= threshold && player.ppk > 0;
