@@ -101,8 +101,8 @@ function parseCSV(csv) {
     }
 
     calculatePlayerValues();
-    fetchGameOdds(); // Fetch odds data if API key is provided
     displayPlayers();
+    fetchGameOdds(); // Fetch odds data in background and refresh display when complete
 }
 
 function calculatePlayerValues() {
@@ -202,6 +202,9 @@ function displayPlayers() {
 
         // Get odds info for this game
         let oddsInfo = '';
+        if (index === 0 && gameInfo) {
+            console.log('Sample gameInfo from CSV:', gameInfo, 'Odds available:', gameOdds[gameInfo] ? 'Yes' : 'No');
+        }
         if (gameInfo && gameOdds[gameInfo]) {
             const odds = gameOdds[gameInfo];
             const spreadText = odds.spread !== null ? `${odds.homeTeam} ${odds.spread > 0 ? '+' : ''}${odds.spread}` : '';
@@ -386,6 +389,7 @@ async function fetchGameOdds() {
         const data = await response.json();
         parseOddsData(data);
         console.log('Successfully fetched odds data');
+        displayPlayers(); // Refresh display with odds data
     } catch (error) {
         console.error('Error fetching odds:', error);
         if (error.message.includes('CORS')) {
@@ -445,6 +449,8 @@ function parseOddsData(oddsData) {
             awayTeam: awayAbbrev
         };
     });
+
+    console.log('Game odds keys:', Object.keys(gameOdds));
 }
 
 // Team name to abbreviation mapping
