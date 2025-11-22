@@ -139,8 +139,7 @@ function calculatePlayerValues() {
     });
 }
 
-function displayPlayers() {
-    const playerList = document.getElementById('playerList');
+function getFilteredAndSortedPlayers() {
     const config = contestConfigs[contestType];
 
     const filteredPlayers = players.filter(p => {
@@ -175,6 +174,13 @@ function displayPlayers() {
         default:
             filteredPlayers.sort((a, b) => parseInt(b.Salary) - parseInt(a.Salary));
     }
+
+    return filteredPlayers;
+}
+
+function displayPlayers() {
+    const playerList = document.getElementById('playerList');
+    const filteredPlayers = getFilteredAndSortedPlayers();
 
     if (filteredPlayers.length === 0) {
         playerList.innerHTML = '<p class="placeholder-text">No players available for this position</p>';
@@ -228,13 +234,8 @@ function initializeLineupSlots() {
 }
 
 function addPlayerToLineup(playerIndex) {
-    const player = players.filter(p => {
-        if (currentPosition === 'ALL') return true;
-        if (currentPosition === 'FLEX') {
-            return contestConfigs[contestType].flexEligible.includes(p.Position);
-        }
-        return p.Position === currentPosition;
-    }).sort((a, b) => parseInt(b.Salary) - parseInt(a.Salary))[playerIndex];
+    const filteredPlayers = getFilteredAndSortedPlayers();
+    const player = filteredPlayers[playerIndex];
 
     if (!player) return;
 
