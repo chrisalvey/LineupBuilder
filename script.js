@@ -169,6 +169,9 @@ function displayPlayers() {
         case 'ppk-high':
             filteredPlayers.sort((a, b) => (b.ppk || 0) - (a.ppk || 0));
             break;
+        case 'name-az':
+            filteredPlayers.sort((a, b) => a.Name.localeCompare(b.Name));
+            break;
         default:
             filteredPlayers.sort((a, b) => parseInt(b.Salary) - parseInt(a.Salary));
     }
