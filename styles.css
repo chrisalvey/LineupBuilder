@@ -1,0 +1,249 @@
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    min-height: 100vh;
+    padding: 20px;
+}
+
+.container {
+    max-width: 1400px;
+    margin: 0 auto;
+    background: white;
+    border-radius: 10px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+    overflow: hidden;
+}
+
+.header {
+    background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+    color: white;
+    padding: 30px;
+    text-align: center;
+}
+
+.header h1 {
+    font-size: 2.5em;
+    margin-bottom: 15px;
+}
+
+.contest-selector {
+    margin-top: 15px;
+}
+
+.contest-selector label {
+    font-size: 1.1em;
+    margin-right: 10px;
+}
+
+.contest-selector select {
+    padding: 8px 15px;
+    font-size: 1em;
+    border-radius: 5px;
+    border: none;
+    background: white;
+    cursor: pointer;
+}
+
+.main-content {
+    padding: 30px;
+}
+
+.upload-section {
+    text-align: center;
+    margin-bottom: 30px;
+}
+
+.upload-btn {
+    display: inline-block;
+    padding: 12px 30px;
+    background: #667eea;
+    color: white;
+    border-radius: 5px;
+    cursor: pointer;
+    font-size: 1.1em;
+    transition: background 0.3s;
+}
+
+.upload-btn:hover {
+    background: #5568d3;
+}
+
+#fileName {
+    margin-left: 15px;
+    font-style: italic;
+    color: #666;
+}
+
+.lineup-container {
+    display: grid;
+    grid-template-columns: 2fr 1fr;
+    gap: 30px;
+}
+
+.player-selection, .current-lineup {
+    background: #f8f9fa;
+    border-radius: 8px;
+    padding: 20px;
+}
+
+.position-tabs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-bottom: 20px;
+}
+
+.tab-btn {
+    flex: 1;
+    min-width: 120px;
+    padding: 12px 20px;
+    background: white;
+    border: 2px solid #ddd;
+    border-radius: 5px;
+    cursor: pointer;
+    font-size: 1em;
+    transition: all 0.3s;
+}
+
+.tab-btn:hover {
+    border-color: #667eea;
+    color: #667eea;
+}
+
+.tab-btn.active {
+    background: #667eea;
+    color: white;
+    border-color: #667eea;
+}
+
+.player-list {
+    background: white;
+    border-radius: 5px;
+    padding: 20px;
+    min-height: 400px;
+    max-height: 600px;
+    overflow-y: auto;
+}
+
+.placeholder-text {
+    text-align: center;
+    color: #999;
+    padding: 50px 20px;
+}
+
+.player-item {
+    padding: 15px;
+    border: 1px solid #ddd;
+    border-radius: 5px;
+    margin-bottom: 10px;
+    cursor: pointer;
+    transition: all 0.3s;
+}
+
+.player-item:hover {
+    background: #f0f0f0;
+    border-color: #667eea;
+}
+
+.player-name {
+    font-weight: bold;
+    font-size: 1.1em;
+    margin-bottom: 5px;
+}
+
+.player-details {
+    display: flex;
+    justify-content: space-between;
+    color: #666;
+    font-size: 0.9em;
+}
+
+.current-lineup h2 {
+    margin-bottom: 20px;
+    color: #333;
+}
+
+.salary-info {
+    background: white;
+    padding: 15px;
+    border-radius: 5px;
+    margin-bottom: 20px;
+}
+
+.salary-item {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 10px;
+    font-size: 1.1em;
+}
+
+.salary-item:last-child {
+    margin-bottom: 0;
+    font-weight: bold;
+    color: #667eea;
+}
+
+.lineup-slots {
+    background: white;
+    padding: 15px;
+    border-radius: 5px;
+}
+
+.lineup-slot {
+    padding: 15px;
+    border: 2px dashed #ddd;
+    border-radius: 5px;
+    margin-bottom: 10px;
+    min-height: 60px;
+}
+
+.lineup-slot.filled {
+    border: 2px solid #667eea;
+    background: #f0f4ff;
+}
+
+.slot-label {
+    font-weight: bold;
+    color: #666;
+    margin-bottom: 5px;
+}
+
+.slot-player {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.remove-btn {
+    background: #dc3545;
+    color: white;
+    border: none;
+    padding: 5px 10px;
+    border-radius: 3px;
+    cursor: pointer;
+    font-size: 0.9em;
+}
+
+.remove-btn:hover {
+    background: #c82333;
+}
+
+@media (max-width: 768px) {
+    .lineup-container {
+        grid-template-columns: 1fr;
+    }
+
+    .position-tabs {
+        flex-direction: column;
+    }
+
+    .tab-btn {
+        min-width: auto;
+    }
+}

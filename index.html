@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DraftKings Lineup Builder</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>DraftKings Lineup Builder</h1>
+            <div class="contest-selector">
+                <label for="contestType">Contest Type:</label>
+                <select id="contestType">
+                    <option value="classic">Classic</option>
+                    <option value="showdown">Showdown</option>
+                </select>
+            </div>
+        </div>
+
+        <div class="main-content">
+            <div class="upload-section">
+                <label for="playerUpload" class="upload-btn">Upload Player CSV</label>
+                <input type="file" id="playerUpload" accept=".csv" style="display: none;">
+                <span id="fileName"></span>
+            </div>
+
+            <div class="lineup-container">
+                <div class="player-selection">
+                    <div class="position-tabs">
+                        <button class="tab-btn active" data-position="QB">Quarterback</button>
+                        <button class="tab-btn" data-position="RB">Running Back</button>
+                        <button class="tab-btn" data-position="WR">Wide Receiver</button>
+                        <button class="tab-btn" data-position="TE">Tight End</button>
+                        <button class="tab-btn" data-position="FLEX">Flex</button>
+                        <button class="tab-btn" data-position="DST">Defense</button>
+                    </div>
+
+                    <div class="player-list" id="playerList">
+                        <p class="placeholder-text">Upload a CSV file to see available players</p>
+                    </div>
+                </div>
+
+                <div class="current-lineup">
+                    <h2>Current Lineup</h2>
+                    <div class="salary-info">
+                        <div class="salary-item">
+                            <span>Salary Used:</span>
+                            <span id="salaryUsed">$0</span>
+                        </div>
+                        <div class="salary-item">
+                            <span>Salary Remaining:</span>
+                            <span id="salaryRemaining">$50,000</span>
+                        </div>
+                    </div>
+                    <div class="lineup-slots" id="lineupSlots">
+                        <!-- Lineup slots will be populated by JavaScript -->
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
