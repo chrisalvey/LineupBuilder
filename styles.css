@@ -138,30 +138,53 @@ body {
 }
 
 .player-item {
-    padding: 15px;
+    padding: 12px 15px;
     border: 1px solid #ddd;
     border-radius: 5px;
-    margin-bottom: 10px;
+    margin-bottom: 8px;
     cursor: pointer;
     transition: all 0.3s;
+    background: white;
 }
 
 .player-item:hover {
-    background: #f0f0f0;
+    background: #f8f9ff;
     border-color: #667eea;
+    transform: translateX(2px);
 }
 
 .player-name {
     font-weight: bold;
-    font-size: 1.1em;
-    margin-bottom: 5px;
+    font-size: 1.05em;
+    margin-bottom: 6px;
+    color: #333;
 }
 
 .player-details {
     display: flex;
     justify-content: space-between;
     color: #666;
-    font-size: 0.9em;
+    font-size: 0.85em;
+    margin-bottom: 3px;
+}
+
+.player-details:last-child {
+    margin-bottom: 0;
+}
+
+.player-salary {
+    font-weight: 600;
+    color: #2a5298;
+}
+
+.player-avg {
+    color: #28a745;
+    font-weight: 500;
+}
+
+.player-game {
+    font-size: 0.8em;
+    color: #999;
 }
 
 .current-lineup h2 {
@@ -232,6 +255,16 @@ body {
 
 .remove-btn:hover {
     background: #c82333;
+}
+
+.captain-badge {
+    background: #ffd700;
+    color: #333;
+    padding: 2px 8px;
+    border-radius: 3px;
+    font-size: 0.75em;
+    font-weight: bold;
+    margin-left: 5px;
 }
 
 @media (max-width: 768px) {
