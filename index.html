@@ -32,6 +32,16 @@
                         <!-- Position tabs will be populated by JavaScript based on contest type -->
                     </div>
 
+                    <div class="sort-controls">
+                        <label for="sortBy">Sort by:</label>
+                        <select id="sortBy">
+                            <option value="salary-high">Salary (High to Low)</option>
+                            <option value="salary-low">Salary (Low to High)</option>
+                            <option value="avg-high">Avg Points (High to Low)</option>
+                            <option value="ppk-high">Value/PPK (High to Low)</option>
+                        </select>
+                    </div>
+
                     <div class="player-list" id="playerList">
                         <p class="placeholder-text">Upload a CSV file to see available players</p>
                     </div>
@@ -39,6 +49,9 @@
 
                 <div class="current-lineup">
                     <h2>Current Lineup</h2>
+                    <button class="check-injuries-btn" id="checkInjuriesBtn" onclick="checkInjuries()">
+                        Check Injury Status
+                    </button>
                     <div class="salary-info">
                         <div class="salary-item">
                             <span>Salary Used:</span>

@@ -4,6 +4,8 @@ let currentLineup = {};
 let currentPosition = 'QB';
 let contestType = 'classic';
 let salaryCap = 50000;
+let currentSort = 'salary-high';
+let injuryData = {};
 
 // Contest configurations based on official DraftKings rules
 const contestConfigs = {
@@ -42,6 +44,12 @@ function initializeEventListeners() {
         if (players.length > 0) {
             displayPlayers();
         }
+    });
+
+    // Sort selector
+    document.getElementById('sortBy').addEventListener('change', function(e) {
+        currentSort = e.target.value;
+        displayPlayers();
     });
 
     // Position tabs
@@ -144,8 +152,27 @@ function displayPlayers() {
         return p.Position === currentPosition;
     });
 
-    // Sort by salary (highest to lowest)
-    filteredPlayers.sort((a, b) => parseInt(b.Salary) - parseInt(a.Salary));
+    // Sort based on current sort selection
+    switch(currentSort) {
+        case 'salary-high':
+            filteredPlayers.sort((a, b) => parseInt(b.Salary) - parseInt(a.Salary));
+            break;
+        case 'salary-low':
+            filteredPlayers.sort((a, b) => parseInt(a.Salary) - parseInt(b.Salary));
+            break;
+        case 'avg-high':
+            filteredPlayers.sort((a, b) => {
+                const aAvg = parseFloat(a.AvgPointsPerGame) || 0;
+                const bAvg = parseFloat(b.AvgPointsPerGame) || 0;
+                return bAvg - aAvg;
+            });
+            break;
+        case 'ppk-high':
+            filteredPlayers.sort((a, b) => (b.ppk || 0) - (a.ppk || 0));
+            break;
+        default:
+            filteredPlayers.sort((a, b) => parseInt(b.Salary) - parseInt(a.Salary));
+    }
 
     if (filteredPlayers.length === 0) {
         playerList.innerHTML = '<p class="placeholder-text">No players available for this position</p>';
@@ -262,10 +289,19 @@ function updateLineupDisplay(slotIndex) {
         const player = currentLineup[slotIndex];
         slot.classList.add('filled');
         const captainBadge = player.isCaptain ? '<span class="captain-badge">1.5x</span>' : '';
+
+        // Get injury status if available
+        const injuryStatus = injuryData[player.id];
+        let injuryBadge = '';
+        if (injuryStatus) {
+            const statusClass = getInjuryStatusClass(injuryStatus);
+            injuryBadge = `<span class="injury-badge ${statusClass}">${injuryStatus}</span>`;
+        }
+
         slotContent.innerHTML = `
             <div class="slot-player">
                 <div>
-                    <strong>${player.name}</strong> ${captainBadge}<br>
+                    <strong>${player.name}</strong> ${captainBadge} ${injuryBadge}<br>
                     <small>${player.team} ${player.position} - $${player.salary.toLocaleString()}</small>
                 </div>
                 <button class="remove-btn" onclick="removePlayerFromLineup(${slotIndex})">Remove</button>
@@ -274,6 +310,27 @@ function updateLineupDisplay(slotIndex) {
     } else {
         slot.classList.remove('filled');
         slotContent.innerHTML = '<span class="empty-slot">Empty</span>';
+    }
+}
+
+function getInjuryStatusClass(status) {
+    switch(status) {
+        case 'HEALTHY':
+        case 'PROBABLE':
+            return 'injury-healthy';
+        case 'QUESTIONABLE':
+        case 'LIMITED':
+            return 'injury-questionable';
+        case 'DOUBTFUL':
+            return 'injury-doubtful';
+        case 'OUT':
+        case 'SUSPENDED':
+        case 'IR':
+            return 'injury-out';
+        case 'CHECK':
+        case 'UNKNOWN':
+        default:
+            return 'injury-unknown';
     }
 }
 
@@ -320,4 +377,79 @@ function updateSalaryDisplay() {
     document.getElementById('salaryUsed').textContent = `$${totalSalary.toLocaleString()}`;
     document.getElementById('salaryRemaining').textContent = `$${remaining.toLocaleString()}`;
     document.getElementById('salaryRemaining').style.color = remaining < 0 ? '#dc3545' : '#667eea';
+}
+
+async function checkInjuries() {
+    const lineupPlayers = Object.values(currentLineup);
+
+    if (lineupPlayers.length === 0) {
+        alert('No players in lineup to check');
+        return;
+    }
+
+    const btn = document.getElementById('checkInjuriesBtn');
+    btn.disabled = true;
+    btn.textContent = 'Checking...';
+
+    // Check each player
+    for (let i = 0; i < Object.keys(currentLineup).length; i++) {
+        if (currentLineup[i]) {
+            const player = currentLineup[i];
+            const injuryStatus = await fetchInjuryStatus(player.name, player.team);
+            injuryData[player.id] = injuryStatus;
+        }
+    }
+
+    // Update displays
+    Object.keys(currentLineup).forEach(slotIndex => {
+        updateLineupDisplay(parseInt(slotIndex));
+    });
+
+    btn.disabled = false;
+    btn.textContent = 'Check Injury Status';
+}
+
+async function fetchInjuryStatus(playerName, team) {
+    try {
+        // Construct search query for NFL injury report
+        const searchQuery = `${playerName} ${team} NFL injury report status`;
+
+        // Use DuckDuckGo Instant Answer API (free, no key required)
+        const url = `https://api.duckduckgo.com/?q=${encodeURIComponent(searchQuery)}&format=json&no_html=1&skip_disambig=1`;
+
+        const response = await fetch(url);
+        const data = await response.json();
+
+        // Parse the response to find injury keywords
+        const text = (data.AbstractText || data.Answer || '').toLowerCase();
+
+        // Check for injury status keywords
+        if (text.includes('out') || text.includes('injured reserve') || text.includes('ir')) {
+            return 'OUT';
+        } else if (text.includes('doubtful')) {
+            return 'DOUBTFUL';
+        } else if (text.includes('questionable') || text.includes('limited')) {
+            return 'QUESTIONABLE';
+        } else if (text.includes('probable') || text.includes('healthy')) {
+            return 'HEALTHY';
+        } else if (text.includes('suspended')) {
+            return 'SUSPENDED';
+        }
+
+        // If no specific status found, check ESPN API as fallback
+        return await checkESPNStatus(playerName, team);
+    } catch (error) {
+        console.error('Error fetching injury status:', error);
+        return 'UNKNOWN';
+    }
+}
+
+async function checkESPNStatus(playerName, team) {
+    try {
+        // This is a simplified check - in production you'd use ESPN API
+        // For now, return UNKNOWN and allow manual verification
+        return 'CHECK';
+    } catch (error) {
+        return 'UNKNOWN';
+    }
 }

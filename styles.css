@@ -122,6 +122,39 @@ body {
     border-color: #667eea;
 }
 
+.sort-controls {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 0;
+    margin-bottom: 15px;
+}
+
+.sort-controls label {
+    font-weight: 600;
+    color: #333;
+}
+
+.sort-controls select {
+    flex: 1;
+    padding: 8px 12px;
+    border: 2px solid #ddd;
+    border-radius: 5px;
+    background: white;
+    font-size: 0.95em;
+    cursor: pointer;
+    transition: border-color 0.3s;
+}
+
+.sort-controls select:hover {
+    border-color: #667eea;
+}
+
+.sort-controls select:focus {
+    outline: none;
+    border-color: #667eea;
+}
+
 .player-list {
     background: white;
     border-radius: 5px;
@@ -209,8 +242,65 @@ body {
 }
 
 .current-lineup h2 {
-    margin-bottom: 20px;
+    margin-bottom: 15px;
     color: #333;
+}
+
+.check-injuries-btn {
+    width: 100%;
+    padding: 12px;
+    background: #28a745;
+    color: white;
+    border: none;
+    border-radius: 5px;
+    font-size: 1em;
+    font-weight: 600;
+    cursor: pointer;
+    margin-bottom: 15px;
+    transition: background 0.3s;
+}
+
+.check-injuries-btn:hover {
+    background: #218838;
+}
+
+.check-injuries-btn:disabled {
+    background: #6c757d;
+    cursor: not-allowed;
+}
+
+.injury-badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 3px;
+    font-size: 0.75em;
+    font-weight: bold;
+    margin-left: 5px;
+}
+
+.injury-healthy {
+    background: #28a745;
+    color: white;
+}
+
+.injury-questionable {
+    background: #ffc107;
+    color: #333;
+}
+
+.injury-doubtful {
+    background: #ff6b6b;
+    color: white;
+}
+
+.injury-out {
+    background: #dc3545;
+    color: white;
+}
+
+.injury-unknown {
+    background: #6c757d;
+    color: white;
 }
 
 .salary-info {
