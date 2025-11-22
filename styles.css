@@ -50,6 +50,39 @@ body {
     cursor: pointer;
 }
 
+.api-key-input {
+    margin-top: 15px;
+}
+
+.api-key-input label {
+    font-size: 1em;
+    margin-right: 10px;
+    color: white;
+}
+
+.api-key-input input {
+    padding: 8px 15px;
+    font-size: 0.95em;
+    border-radius: 5px;
+    border: none;
+    width: 300px;
+    margin-right: 10px;
+}
+
+.api-key-input small {
+    color: rgba(255, 255, 255, 0.8);
+    font-size: 0.85em;
+}
+
+.api-key-input small a {
+    color: #ffd700;
+    text-decoration: none;
+}
+
+.api-key-input small a:hover {
+    text-decoration: underline;
+}
+
 .main-content {
     padding: 30px;
 }
@@ -218,6 +251,14 @@ body {
 .player-game {
     font-size: 0.8em;
     color: #999;
+}
+
+.odds-info {
+    color: #667eea;
+    font-weight: 500;
+    font-size: 0.75em;
+    display: block;
+    margin-top: 3px;
 }
 
 .player-value {

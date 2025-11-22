@@ -5,6 +5,7 @@ let currentPosition = 'QB';
 let contestType = 'classic';
 let salaryCap = 50000;
 let currentSort = 'salary-high';
+let gameOdds = {};
 
 // Contest configurations based on official DraftKings rules
 const contestConfigs = {
@@ -27,6 +28,7 @@ document.addEventListener('DOMContentLoaded', function() {
     initializeEventListeners();
     updatePositionTabs();
     initializeLineupSlots();
+    loadApiKey();
 });
 
 function initializeEventListeners() {
@@ -99,6 +101,7 @@ function parseCSV(csv) {
     }
 
     calculatePlayerValues();
+    fetchGameOdds(); // Fetch odds data if API key is provided
     displayPlayers();
 }
 
@@ -197,6 +200,16 @@ function displayPlayers() {
         const starIcon = player.isTopValue ? '<span class="value-star">⭐</span>' : '';
         const valueClass = player.isTopValue ? 'value-excellent' : '';
 
+        // Get odds info for this game
+        let oddsInfo = '';
+        if (gameInfo && gameOdds[gameInfo]) {
+            const odds = gameOdds[gameInfo];
+            const spreadText = odds.spread !== null ? `${odds.homeTeam} ${odds.spread > 0 ? '+' : ''}${odds.spread}` : '';
+            const totalText = odds.total !== null ? `O/U ${odds.total}` : '';
+            const projText = odds.homeTotal && odds.awayTotal ? `(${odds.awayTeam} ${odds.awayTotal}, ${odds.homeTeam} ${odds.homeTotal})` : '';
+            oddsInfo = spreadText || totalText ? `<br><small class="odds-info">${spreadText} ${totalText} ${projText}</small>` : '';
+        }
+
         return `
             <div class="player-item ${valueClass}" onclick="addPlayerToLineup(${index})">
                 <div class="player-name">${player.Name} ${starIcon}</div>
@@ -209,7 +222,7 @@ function displayPlayers() {
                     <span class="player-salary">$${salary.toLocaleString()}</span>
                 </div>
                 <div class="player-details">
-                    <span class="player-game">${gameInfo}</span>
+                    <span class="player-game">${gameInfo}${oddsInfo}</span>
                 </div>
             </div>
         `;
@@ -358,4 +371,121 @@ function updateSalaryDisplay() {
     document.getElementById('salaryRemaining').textContent = `$${remaining.toLocaleString()}`;
     document.getElementById('salaryRemaining').style.color = remaining < 0 ? '#dc3545' : '#667eea';
     document.getElementById('avgRemaining').textContent = `$${avgRemaining.toLocaleString()}`;
+}
+
+// API Key Management
+function loadApiKey() {
+    const apiKey = localStorage.getItem('oddsApiKey');
+    if (apiKey) {
+        document.getElementById('oddsApiKey').value = apiKey;
+    }
+
+    // Save API key when changed
+    document.getElementById('oddsApiKey').addEventListener('change', function(e) {
+        const key = e.target.value.trim();
+        if (key) {
+            localStorage.setItem('oddsApiKey', key);
+        } else {
+            localStorage.removeItem('oddsApiKey');
+        }
+    });
+}
+
+// Fetch odds from The Odds API
+async function fetchGameOdds() {
+    const apiKey = document.getElementById('oddsApiKey').value.trim();
+    if (!apiKey) {
+        console.log('No API key provided - skipping odds fetch');
+        return;
+    }
+
+    try {
+        const url = `https://api.the-odds-api.com/v4/sports/americanfootball_nfl/odds/?apiKey=${apiKey}&regions=us&markets=spreads,totals&oddsFormat=american`;
+
+        const response = await fetch(url);
+        if (!response.ok) {
+            throw new Error(`API error: ${response.status}`);
+        }
+
+        const data = await response.json();
+        parseOddsData(data);
+        console.log('Successfully fetched odds data');
+    } catch (error) {
+        console.error('Error fetching odds:', error);
+        if (error.message.includes('CORS')) {
+            alert('Unable to fetch odds due to CORS restrictions. The Odds API may not support browser requests.');
+        }
+    }
+}
+
+// Parse odds data and match to games
+function parseOddsData(oddsData) {
+    gameOdds = {};
+
+    oddsData.forEach(game => {
+        const homeTeam = game.home_team;
+        const awayTeam = game.away_team;
+
+        // Get the first bookmaker's odds (typically DraftKings)
+        const bookmaker = game.bookmakers && game.bookmakers[0];
+        if (!bookmaker) return;
+
+        let spread = null;
+        let total = null;
+
+        // Extract spread
+        const spreadMarket = bookmaker.markets.find(m => m.key === 'spreads');
+        if (spreadMarket && spreadMarket.outcomes) {
+            const homeSpread = spreadMarket.outcomes.find(o => o.name === homeTeam);
+            spread = homeSpread ? homeSpread.point : null;
+        }
+
+        // Extract total
+        const totalsMarket = bookmaker.markets.find(m => m.key === 'totals');
+        if (totalsMarket && totalsMarket.outcomes) {
+            const overOutcome = totalsMarket.outcomes.find(o => o.name === 'Over');
+            total = overOutcome ? overOutcome.point : null;
+        }
+
+        // Calculate implied team totals
+        let homeTotal = null;
+        let awayTotal = null;
+        if (total && spread !== null) {
+            homeTotal = (total + spread) / 2;
+            awayTotal = (total - spread) / 2;
+        }
+
+        // Store odds using team abbreviations as keys
+        const homeAbbrev = getTeamAbbreviation(homeTeam);
+        const awayAbbrev = getTeamAbbreviation(awayTeam);
+        const gameKey = `${awayAbbrev}@${homeAbbrev}`;
+
+        gameOdds[gameKey] = {
+            spread: spread,
+            total: total,
+            homeTotal: homeTotal ? homeTotal.toFixed(1) : null,
+            awayTotal: awayTotal ? awayTotal.toFixed(1) : null,
+            homeTeam: homeAbbrev,
+            awayTeam: awayAbbrev
+        };
+    });
+}
+
+// Team name to abbreviation mapping
+function getTeamAbbreviation(fullName) {
+    const teamMap = {
+        'Arizona Cardinals': 'ARI', 'Atlanta Falcons': 'ATL', 'Baltimore Ravens': 'BAL',
+        'Buffalo Bills': 'BUF', 'Carolina Panthers': 'CAR', 'Chicago Bears': 'CHI',
+        'Cincinnati Bengals': 'CIN', 'Cleveland Browns': 'CLE', 'Dallas Cowboys': 'DAL',
+        'Denver Broncos': 'DEN', 'Detroit Lions': 'DET', 'Green Bay Packers': 'GB',
+        'Houston Texans': 'HOU', 'Indianapolis Colts': 'IND', 'Jacksonville Jaguars': 'JAX',
+        'Kansas City Chiefs': 'KC', 'Las Vegas Raiders': 'LV', 'Los Angeles Chargers': 'LAC',
+        'Los Angeles Rams': 'LAR', 'Miami Dolphins': 'MIA', 'Minnesota Vikings': 'MIN',
+        'New England Patriots': 'NE', 'New Orleans Saints': 'NO', 'New York Giants': 'NYG',
+        'New York Jets': 'NYJ', 'Philadelphia Eagles': 'PHI', 'Pittsburgh Steelers': 'PIT',
+        'San Francisco 49ers': 'SF', 'Seattle Seahawks': 'SEA', 'Tampa Bay Buccaneers': 'TB',
+        'Tennessee Titans': 'TEN', 'Washington Commanders': 'WAS'
+    };
+
+    return teamMap[fullName] || fullName;
 }
