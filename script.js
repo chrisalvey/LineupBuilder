@@ -53,6 +53,10 @@ function initializeEventListeners() {
         displayPlayers();
     });
 
+    // Auto-fill and clear buttons
+    document.getElementById('autoFillBtn').addEventListener('click', autoFillLineup);
+    document.getElementById('clearLineupBtn').addEventListener('click', clearLineup);
+
     // Position tabs
     document.querySelectorAll('.tab-btn').forEach(btn => {
         btn.addEventListener('click', function() {
@@ -374,6 +378,112 @@ function updateSalaryDisplay() {
     document.getElementById('salaryRemaining').textContent = `$${remaining.toLocaleString()}`;
     document.getElementById('salaryRemaining').style.color = remaining < 0 ? '#dc3545' : '#667eea';
     document.getElementById('avgRemaining').textContent = `$${avgRemaining.toLocaleString()}`;
+}
+
+// Clear lineup
+function clearLineup() {
+    if (Object.keys(currentLineup).length === 0) {
+        return;
+    }
+
+    if (confirm('Are you sure you want to clear your lineup?')) {
+        currentLineup = {};
+        const positions = contestConfigs[contestType].positions;
+
+        for (let i = 0; i < positions.length; i++) {
+            updateLineupDisplay(i);
+        }
+
+        updateSalaryDisplay();
+    }
+}
+
+// Auto-fill lineup with best value players
+function autoFillLineup() {
+    if (players.length === 0) {
+        alert('Please upload a CSV file first');
+        return;
+    }
+
+    // Clear current lineup
+    currentLineup = {};
+
+    const positions = contestConfigs[contestType].positions;
+    const config = contestConfigs[contestType];
+    const usedPlayerIds = new Set();
+
+    // Track salary as we build
+    let currentSalary = 0;
+
+    // Sort all players by PPK (value) descending
+    const sortedPlayers = [...players].sort((a, b) => (b.ppk || 0) - (a.ppk || 0));
+
+    // Fill each position slot
+    for (let slotIndex = 0; slotIndex < positions.length; slotIndex++) {
+        const slotPosition = positions[slotIndex];
+        const remainingSalary = salaryCap - currentSalary;
+        const remainingSlots = positions.length - slotIndex;
+        const maxSalaryForSlot = remainingSalary - (remainingSlots - 1) * 3000; // Reserve min $3k per remaining slot
+
+        // Find best available player for this position
+        let bestPlayer = null;
+
+        for (const player of sortedPlayers) {
+            // Skip if already used
+            if (usedPlayerIds.has(player.ID)) continue;
+
+            const playerSalary = parseInt(player.Salary) || 0;
+
+            // Skip if too expensive
+            if (playerSalary > maxSalaryForSlot) continue;
+
+            // Check position eligibility
+            let eligible = false;
+
+            if (slotPosition === 'CPT') {
+                // Captain can be any position
+                eligible = true;
+            } else if (slotPosition === 'FLEX') {
+                // FLEX can be RB/WR/TE in classic, or any in showdown
+                eligible = config.flexEligible.includes(player.Position);
+            } else {
+                // Must match exact position
+                eligible = player.Position === slotPosition;
+            }
+
+            if (eligible) {
+                bestPlayer = player;
+                break;
+            }
+        }
+
+        // Add player to lineup if found
+        if (bestPlayer) {
+            const playerSalary = parseInt(bestPlayer.Salary) || 0;
+
+            currentLineup[slotIndex] = {
+                name: bestPlayer.Name,
+                id: bestPlayer.ID,
+                position: bestPlayer.Position,
+                salary: playerSalary,
+                team: bestPlayer.TeamAbbrev || '',
+                avgPoints: bestPlayer.AvgPointsPerGame || '0',
+                isCaptain: slotPosition === 'CPT'
+            };
+
+            usedPlayerIds.add(bestPlayer.ID);
+            currentSalary += playerSalary;
+            updateLineupDisplay(slotIndex);
+        }
+    }
+
+    updateSalaryDisplay();
+
+    // Alert if lineup is incomplete
+    const filledSlots = Object.keys(currentLineup).length;
+    if (filledSlots < positions.length) {
+        alert(`Auto-fill completed but could only fill ${filledSlots} of ${positions.length} positions. Try adjusting salary constraints or check available players.`);
+    }
 }
 
 // Fetch odds from The Odds API
