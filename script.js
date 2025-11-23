@@ -405,25 +405,37 @@ function autoFillLineup() {
         return;
     }
 
-    // Clear current lineup
-    currentLineup = {};
-
     const positions = contestConfigs[contestType].positions;
     const config = contestConfigs[contestType];
-    const usedPlayerIds = new Set();
 
-    // Track salary as we build
+    // Track already used players from existing lineup
+    const usedPlayerIds = new Set();
     let currentSalary = 0;
+
+    // Add existing players to used set and calculate current salary
+    Object.values(currentLineup).forEach(player => {
+        usedPlayerIds.add(player.id);
+        currentSalary += player.salary;
+    });
 
     // Sort all players by PPK (value) descending
     const sortedPlayers = [...players].sort((a, b) => (b.ppk || 0) - (a.ppk || 0));
 
+    // Count empty slots to calculate remaining slots correctly
+    const emptySlots = positions.filter((_, idx) => !currentLineup[idx]).length;
+    let emptySlotsFilled = 0;
+
     // Fill each position slot
     for (let slotIndex = 0; slotIndex < positions.length; slotIndex++) {
+        // Skip if slot is already filled
+        if (currentLineup[slotIndex]) {
+            continue;
+        }
+
         const slotPosition = positions[slotIndex];
         const remainingSalary = salaryCap - currentSalary;
-        const remainingSlots = positions.length - slotIndex;
-        const maxSalaryForSlot = remainingSalary - (remainingSlots - 1) * 3000; // Reserve min $3k per remaining slot
+        const remainingEmptySlots = emptySlots - emptySlotsFilled;
+        const maxSalaryForSlot = remainingSalary - (remainingEmptySlots - 1) * 3000; // Reserve min $3k per remaining slot
 
         // Find best available player for this position
         let bestPlayer = null;
@@ -473,6 +485,7 @@ function autoFillLineup() {
 
             usedPlayerIds.add(bestPlayer.ID);
             currentSalary += playerSalary;
+            emptySlotsFilled++;
             updateLineupDisplay(slotIndex);
         }
     }
@@ -481,8 +494,15 @@ function autoFillLineup() {
 
     // Alert if lineup is incomplete
     const filledSlots = Object.keys(currentLineup).length;
-    if (filledSlots < positions.length) {
-        alert(`Auto-fill completed but could only fill ${filledSlots} of ${positions.length} positions. Try adjusting salary constraints or check available players.`);
+    const totalSlots = positions.length;
+
+    if (emptySlotsFilled > 0) {
+        // Show success message if we filled any slots
+        if (filledSlots < totalSlots) {
+            alert(`Auto-fill added ${emptySlotsFilled} player${emptySlotsFilled !== 1 ? 's' : ''}. ${totalSlots - filledSlots} position${totalSlots - filledSlots !== 1 ? 's' : ''} still empty.`);
+        }
+    } else if (filledSlots < totalSlots) {
+        alert(`Could not auto-fill any positions. Try adjusting salary constraints or check available players.`);
     }
 }
 
