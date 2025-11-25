@@ -769,9 +769,13 @@ async function fetchInjuryData() {
                         status = 'Q';
                     }
 
+                    // Ensure description is always a string
+                    const desc = injury.longComment || injury.details?.detail || injury.type || 'Injury';
+                    const descStr = typeof desc === 'string' ? desc : String(desc || 'Injury');
+
                     injuryData[normalizedName] = {
                         status: status,
-                        description: injury.longComment || injury.details?.detail || injury.type || 'Injury',
+                        description: descStr,
                         originalName: playerName,
                         team: teamObj.displayName || ''
                     };
@@ -805,9 +809,13 @@ async function fetchInjuryData() {
                         const playerName = player.athlete.displayName || player.athlete.fullName || '';
                         const normalizedName = normalizePlayerName(playerName);
 
+                        // Ensure description is always a string
+                        const desc = player.injury.longComment || player.injury.type || 'Injury';
+                        const descStr = typeof desc === 'string' ? desc : String(desc || 'Injury');
+
                         injuryData[normalizedName] = {
                             status: player.injury.status || 'Q',
-                            description: player.injury.longComment || player.injury.type || 'Injury',
+                            description: descStr,
                             originalName: playerName
                         };
                     }
