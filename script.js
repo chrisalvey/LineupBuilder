@@ -702,6 +702,12 @@ async function fetchInjuryData() {
         if (injuryResponse.ok) {
             const injuryDataRaw = await injuryResponse.json();
 
+            console.log('Raw injury API response keys:', Object.keys(injuryDataRaw));
+            console.log('Teams array length:', injuryDataRaw.teams?.length || 0);
+            if (injuryDataRaw.teams && injuryDataRaw.teams.length > 0) {
+                console.log('First team structure:', injuryDataRaw.teams[0]);
+            }
+
             // Clear existing injury data
             injuryData = {};
 
