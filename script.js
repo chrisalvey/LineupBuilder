@@ -270,8 +270,9 @@ function displayPlayers() {
                     envTooltip += '+ Weather(-10) ';
                 }
             }
-            if (injuryData[player.ID]) {
-                const status = injuryData[player.ID].status;
+            const playerNormName = normalizePlayerName(player.Name);
+            if (injuryData[playerNormName]) {
+                const status = injuryData[playerNormName].status;
                 if (status === 'Q') envTooltip += '+ Injury(-5) ';
                 else if (status === 'D') envTooltip += '+ Injury(-15) ';
                 else if (status === 'OUT' || status === 'IR') envTooltip += '+ Injury(-100) ';
@@ -283,8 +284,9 @@ function displayPlayers() {
 
         // Injury status badge
         let injuryBadge = '';
-        if (injuryData[player.ID]) {
-            const injury = injuryData[player.ID];
+        const normalizedPlayerName = normalizePlayerName(player.Name);
+        if (injuryData[normalizedPlayerName]) {
+            const injury = injuryData[normalizedPlayerName];
             const injuryClass = injury.status === 'OUT' || injury.status === 'IR' ? 'injury-out' :
                                injury.status === 'D' ? 'injury-doubtful' : 'injury-questionable';
             injuryBadge = `<span class="injury-badge ${injuryClass}" title="${injury.description}">${injury.status}</span>`;
@@ -694,11 +696,6 @@ async function fetchDefenseRankings() {
 // Fetch injury data from ESPN
 async function fetchInjuryData() {
     try {
-        // ESPN injury endpoint - fetch for all teams
-        const teamAbbrevs = ['ARI', 'ATL', 'BAL', 'BUF', 'CAR', 'CHI', 'CIN', 'CLE', 'DAL', 'DEN',
-                            'DET', 'GB', 'HOU', 'IND', 'JAX', 'KC', 'LV', 'LAC', 'LAR', 'MIA',
-                            'MIN', 'NE', 'NO', 'NYG', 'NYJ', 'PHI', 'PIT', 'SF', 'SEA', 'TB', 'TEN', 'WAS'];
-
         // Fetch injuries from ESPN scoreboard which includes injury data
         const response = await fetch('https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard');
         if (!response.ok) return;
@@ -706,14 +703,22 @@ async function fetchInjuryData() {
         const data = await response.json();
         const events = data.events || [];
 
+        // Clear existing injury data
+        injuryData = {};
+
         events.forEach(event => {
             event.competitions?.[0]?.competitors?.forEach(competitor => {
                 const roster = competitor.roster || [];
                 roster.forEach(player => {
                     if (player.injury) {
-                        injuryData[player.athlete.id] = {
+                        // Normalize player name for matching (remove Jr., Sr., III, etc.)
+                        const playerName = player.athlete.displayName || player.athlete.fullName || '';
+                        const normalizedName = normalizePlayerName(playerName);
+
+                        injuryData[normalizedName] = {
                             status: player.injury.status || 'Q',
-                            description: player.injury.longComment || player.injury.type || 'Injury'
+                            description: player.injury.longComment || player.injury.type || 'Injury',
+                            originalName: playerName
                         };
                     }
                 });
@@ -721,10 +726,23 @@ async function fetchInjuryData() {
         });
 
         console.log('Injury data loaded:', Object.keys(injuryData).length, 'injured players');
+        if (Object.keys(injuryData).length > 0) {
+            console.log('Sample injuries:', Object.keys(injuryData).slice(0, 5));
+        }
         displayPlayers();
     } catch (error) {
         console.error('Error fetching injury data:', error);
     }
+}
+
+// Normalize player names for matching between CSV and ESPN data
+function normalizePlayerName(name) {
+    if (!name) return '';
+    return name
+        .toUpperCase()
+        .replace(/\s+(JR\.?|SR\.?|III|IV|II)$/i, '') // Remove suffixes
+        .replace(/[.\-']/g, '') // Remove punctuation
+        .trim();
 }
 
 // Fetch weather data (using game locations)
@@ -865,8 +883,9 @@ function calculateAdvancedMetrics() {
         }
 
         // Injury component (-5 to -100)
-        if (injuryData[player.ID]) {
-            const status = injuryData[player.ID].status;
+        const normalizedPlayerName = normalizePlayerName(player.Name);
+        if (injuryData[normalizedPlayerName]) {
+            const status = injuryData[normalizedPlayerName].status;
             if (status === 'OUT' || status === 'IR') {
                 envScore = 0; // Unplayable
             } else if (status === 'D') {
