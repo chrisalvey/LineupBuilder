@@ -255,44 +255,52 @@ function displayPlayers() {
                 scoreClass = 'env-neutral';
             }
 
-            // Build detailed tooltip explaining the calculation
+            // Build detailed tooltip explaining the Vegas-only calculation
             let envTooltip = `Game Environment Score: ${score}/100\n\n`;
-            envTooltip += 'Calculation: Base(50) ';
-            if (player.defenseMultiplier > 1.0) envTooltip += '+ Defense(+20) ';
-            else if (player.defenseMultiplier < 1.0) envTooltip += '+ Defense(-20) ';
-            if (player.vegasBonus !== undefined && player.vegasBonus !== 0) {
-                envTooltip += `+ Vegas(${player.vegasBonus > 0 ? '+' : ''}${player.vegasBonus}) `;
+            envTooltip += 'Vegas-Based Game Conditions:\n';
+            envTooltip += 'Base(50) ';
+
+            // Implied Team Total component
+            if (player.impliedTeamTotal !== null && player.impliedTeamTotal !== undefined) {
+                const totalContribution = Math.round(((player.impliedTeamTotal - 22.5) / 7.5) * 25);
+                envTooltip += `+ Team Total(${totalContribution > 0 ? '+' : ''}${totalContribution}) `;
             }
-            const hasWeather = gameInfo && weatherData[gameInfo];
-            if (hasWeather && !weatherData[gameInfo].indoor) {
-                const conditions = weatherData[gameInfo].conditions?.toLowerCase() || '';
-                if (conditions.includes('rain') || conditions.includes('snow')) {
-                    envTooltip += '+ Weather(-10) ';
+
+            // Game Total/Pace component
+            if (player.gameTotal !== null && player.gameTotal !== undefined) {
+                let paceContribution = 0;
+                if (player.gameTotal >= 50) paceContribution = 12;
+                else if (player.gameTotal >= 46) paceContribution = 6;
+                else if (player.gameTotal >= 38) paceContribution = -6;
+                else if (player.gameTotal < 38) paceContribution = -12;
+
+                if (paceContribution !== 0) {
+                    envTooltip += `+ Pace(${paceContribution > 0 ? '+' : ''}${paceContribution}) `;
                 }
             }
-            const playerNormName = normalizePlayerName(player.Name);
-            if (injuryData[playerNormName]) {
-                const injury = injuryData[playerNormName];
-                const status = injury.status;
-                const description = injury.description?.toLowerCase() || '';
 
-                const isInformational = description.includes('full') ||
-                                       description.includes('practiced fully') ||
-                                       description.includes('no injury') ||
-                                       description.includes('expected to play') ||
-                                       description.includes('cleared') ||
-                                       description.includes('activated') ||
-                                       description.includes('returned to practice');
+            // Game Script/Spread component
+            if (player.playerSpread !== null && player.playerSpread !== undefined) {
+                let scriptContribution = 0;
+                const pos = player.Position;
 
-                if (status === 'OUT' || status === 'IR') {
-                    envTooltip += '+ Injury(-100) ';
-                } else if (status === 'D') {
-                    envTooltip += '+ Injury(-15) ';
-                } else if (status === 'Q' && !isInformational) {
-                    envTooltip += '+ Injury(-5) ';
+                if (['WR', 'TE', 'QB'].includes(pos)) {
+                    if (player.playerSpread > 7) scriptContribution = 12;
+                    else if (player.playerSpread > 3) scriptContribution = 6;
+                    else if (player.playerSpread < -10) scriptContribution = -8;
+                    else if (player.playerSpread < -6) scriptContribution = -4;
+                } else if (pos === 'RB') {
+                    if (player.playerSpread < -7) scriptContribution = 12;
+                    else if (player.playerSpread < -3) scriptContribution = 6;
+                    else if (player.playerSpread > 10) scriptContribution = -8;
+                    else if (player.playerSpread > 6) scriptContribution = -4;
                 }
-                // No tooltip addition for informational status
+
+                if (scriptContribution !== 0) {
+                    envTooltip += `+ Script(${scriptContribution > 0 ? '+' : ''}${scriptContribution}) `;
+                }
             }
+
             envTooltip += `= ${score}`;
 
             envScoreBadge = `<span class="env-score ${scoreClass}" title="${envTooltip}">${score}</span>`;
@@ -893,6 +901,24 @@ function calculateRecentPerformance() {
     console.log('Recent performance calculated');
 }
 
+// Helper function to get player's team spread from odds data
+function getPlayerTeamSpread(player, gameInfo) {
+    if (!gameInfo || !gameOdds[gameInfo]) return null;
+
+    const odds = gameOdds[gameInfo];
+    const playerTeam = player.TeamAbbrev;
+
+    // Spread is from home team's perspective
+    // Positive spread = home team underdog, negative = home team favorite
+    if (odds.homeTeam === playerTeam) {
+        return odds.spread; // Return as-is for home team
+    } else if (odds.awayTeam === playerTeam) {
+        return odds.spread ? -odds.spread : null; // Flip sign for away team
+    }
+
+    return null;
+}
+
 // Calculate advanced metrics (MPPK, Vegas Value, Game Environment Score)
 function calculateAdvancedMetrics() {
     players.forEach(player => {
@@ -953,54 +979,64 @@ function calculateAdvancedMetrics() {
             }
         }
 
-        // 3. Game Environment Score (0-100)
+        // 3. Game Environment Score (0-100) - Vegas-Only Approach
         let envScore = 50; // Start at baseline
+        let gameTotal = null;
+        let playerSpread = null;
 
-        // Defense matchup component (+/- 20)
-        if (defenseMultiplier > 1.0) {
-            envScore += 20; // Good matchup
-        } else if (defenseMultiplier < 1.0) {
-            envScore -= 20; // Bad matchup
-        }
+        if (gameInfo && gameOdds[gameInfo] && player.Position !== 'DST') {
+            const odds = gameOdds[gameInfo];
 
-        // Vegas component (already calculated as vegasBonus)
-        envScore += vegasBonus;
+            // PRIMARY: Implied Team Total (scales 15-30 pts to contribute -25 to +25)
+            if (impliedTeamTotal !== null) {
+                const totalContribution = ((impliedTeamTotal - 22.5) / 7.5) * 25; // Center at 22.5
+                envScore += totalContribution;
+            }
 
-        // Weather component (-10 for bad weather)
-        if (gameInfo && weatherData[gameInfo]) {
-            const weather = weatherData[gameInfo];
-            if (!weather.indoor) {
-                const conditions = weather.conditions?.toLowerCase() || '';
-                if (conditions.includes('rain') || conditions.includes('snow')) {
-                    envScore -= 10;
+            // SECONDARY: Game Total/Pace (O/U indicates opportunity volume)
+            if (odds.total !== null) {
+                gameTotal = parseFloat(odds.total);
+                if (gameTotal >= 50) {
+                    envScore += 12; // Fast-paced, lots of opportunities
+                } else if (gameTotal >= 46) {
+                    envScore += 6;
+                } else if (gameTotal >= 42) {
+                    envScore += 0;
+                } else if (gameTotal >= 38) {
+                    envScore -= 6;
+                } else {
+                    envScore -= 12; // Slow-paced, fewer opportunities
                 }
             }
-        }
 
-        // Injury component (-5 to -100)
-        const normalizedPlayerName = normalizePlayerName(player.Name);
-        if (injuryData[normalizedPlayerName]) {
-            const injury = injuryData[normalizedPlayerName];
-            const status = injury.status;
-            const description = injury.description?.toLowerCase() || '';
-
-            // Check if it's informational rather than injury-related
-            const isInformational = description.includes('full') ||
-                                   description.includes('practiced fully') ||
-                                   description.includes('no injury') ||
-                                   description.includes('expected to play') ||
-                                   description.includes('cleared') ||
-                                   description.includes('activated') ||
-                                   description.includes('returned to practice');
-
-            if (status === 'OUT' || status === 'IR') {
-                envScore = 0; // Unplayable
-            } else if (status === 'D') {
-                envScore -= 15; // Doubtful
-            } else if (status === 'Q' && !isInformational) {
-                envScore -= 5; // Questionable (only if actual injury concern)
+            // TERTIARY: Game Script (spread-based, position-specific)
+            playerSpread = getPlayerTeamSpread(player, gameInfo);
+            if (playerSpread !== null) {
+                // Pass-catchers (WR/TE/QB) benefit from being underdogs (more passing when trailing)
+                if (['WR', 'TE', 'QB'].includes(player.Position)) {
+                    if (playerSpread > 7) {
+                        envScore += 12; // Big underdog
+                    } else if (playerSpread > 3) {
+                        envScore += 6; // Small underdog
+                    } else if (playerSpread < -10) {
+                        envScore -= 8; // Big favorite
+                    } else if (playerSpread < -6) {
+                        envScore -= 4; // Small favorite
+                    }
+                }
+                // RBs benefit from being favorites (more rushing when leading)
+                else if (player.Position === 'RB') {
+                    if (playerSpread < -7) {
+                        envScore += 12; // Big favorite
+                    } else if (playerSpread < -3) {
+                        envScore += 6; // Small favorite
+                    } else if (playerSpread > 10) {
+                        envScore -= 8; // Big underdog
+                    } else if (playerSpread > 6) {
+                        envScore -= 4; // Small underdog
+                    }
+                }
             }
-            // No penalty for informational Q status
         }
 
         // Clamp score to 0-100
@@ -1010,6 +1046,8 @@ function calculateAdvancedMetrics() {
         player.mppk = mppk;
         player.vegasBonus = vegasBonus;
         player.impliedTeamTotal = impliedTeamTotal;
+        player.gameTotal = gameTotal;
+        player.playerSpread = playerSpread;
         player.envScore = envScore;
         player.defenseMultiplier = defenseMultiplier;
     });
