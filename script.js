@@ -206,7 +206,7 @@ function getFilteredAndSortedPlayers() {
 function displayPlayers() {
     const playerList = document.getElementById('playerList');
 
-    // Calculate advanced metrics before displaying
+    // Calculate advanced metrics BEFORE filtering and sorting
     calculateAdvancedMetrics();
 
     const filteredPlayers = getFilteredAndSortedPlayers();
@@ -224,10 +224,18 @@ function displayPlayers() {
         // Value indicators - use MPPK if available, otherwise PPK
         const basePpk = player.ppk > 0 ? player.ppk.toFixed(2) : 'N/A';
         const mppkValue = player.mppk > 0 ? player.mppk.toFixed(2) : basePpk;
+
+        // Build tooltip explaining the value
+        let valueTooltip = 'Matchup-Adjusted Points Per $1K';
+        if (player.mppk && player.mppk !== player.ppk) {
+            const multiplier = ((player.mppk / player.ppk - 1) * 100).toFixed(0);
+            valueTooltip += ` (${multiplier > 0 ? '+' : ''}${multiplier}% from matchup)`;
+        }
+
         const ppkDisplay = player.mppk && player.mppk !== player.ppk ?
-            `${mppkValue} <small style="color:#999;text-decoration:line-through;">${basePpk}</small>` :
-            mppkValue;
-        const starIcon = player.isTopValue ? '<span class="value-star">⭐</span>' : '';
+            `<span title="${valueTooltip}">${mppkValue}</span> <small style="color:#999;text-decoration:line-through;" title="Base PPK: ${basePpk}">${basePpk}</small>` :
+            `<span title="${valueTooltip}">${mppkValue}</span>`;
+        const starIcon = player.isTopValue ? '<span class="value-star" title="Top 10% value for position">⭐</span>' : '';
         const valueClass = player.isTopValue ? 'value-excellent' : '';
 
         // Game Environment Score badge
