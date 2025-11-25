@@ -273,6 +273,20 @@ body {
     background: #dc3545;
 }
 
+/* Info badge for informational player notes */
+.info-badge {
+    display: inline-block;
+    margin-left: 5px;
+    font-size: 1em;
+    cursor: help;
+    opacity: 0.8;
+    transition: opacity 0.3s;
+}
+
+.info-badge:hover {
+    opacity: 1;
+}
+
 /* Defense matchup indicators */
 .defense-matchup {
     display: inline-block;

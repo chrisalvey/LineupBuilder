@@ -272,24 +272,57 @@ function displayPlayers() {
             }
             const playerNormName = normalizePlayerName(player.Name);
             if (injuryData[playerNormName]) {
-                const status = injuryData[playerNormName].status;
-                if (status === 'Q') envTooltip += '+ Injury(-5) ';
-                else if (status === 'D') envTooltip += '+ Injury(-15) ';
-                else if (status === 'OUT' || status === 'IR') envTooltip += '+ Injury(-100) ';
+                const injury = injuryData[playerNormName];
+                const status = injury.status;
+                const description = injury.description?.toLowerCase() || '';
+
+                const isInformational = description.includes('full') ||
+                                       description.includes('practiced fully') ||
+                                       description.includes('no injury') ||
+                                       description.includes('expected to play') ||
+                                       description.includes('cleared') ||
+                                       description.includes('activated') ||
+                                       description.includes('returned to practice');
+
+                if (status === 'OUT' || status === 'IR') {
+                    envTooltip += '+ Injury(-100) ';
+                } else if (status === 'D') {
+                    envTooltip += '+ Injury(-15) ';
+                } else if (status === 'Q' && !isInformational) {
+                    envTooltip += '+ Injury(-5) ';
+                }
+                // No tooltip addition for informational status
             }
             envTooltip += `= ${score}`;
 
             envScoreBadge = `<span class="env-score ${scoreClass}" title="${envTooltip}">${score}</span>`;
         }
 
-        // Injury status badge
+        // Injury/Info status badge
         let injuryBadge = '';
         const normalizedPlayerName = normalizePlayerName(player.Name);
         if (injuryData[normalizedPlayerName]) {
             const injury = injuryData[normalizedPlayerName];
-            const injuryClass = injury.status === 'OUT' || injury.status === 'IR' ? 'injury-out' :
-                               injury.status === 'D' ? 'injury-doubtful' : 'injury-questionable';
-            injuryBadge = `<span class="injury-badge ${injuryClass}" title="${injury.description}">${injury.status}</span>`;
+            const description = injury.description?.toLowerCase() || '';
+
+            // Check if description is informational rather than injury-related
+            const isInformational = description.includes('full') ||
+                                   description.includes('practiced fully') ||
+                                   description.includes('no injury') ||
+                                   description.includes('expected to play') ||
+                                   description.includes('cleared') ||
+                                   description.includes('activated') ||
+                                   description.includes('returned to practice');
+
+            // For Q status with informational content, use info icon instead
+            if (injury.status === 'Q' && isInformational) {
+                injuryBadge = `<span class="info-badge" title="${injury.description}">ℹ️</span>`;
+            } else {
+                // Use regular injury badges for OUT, D, or actual injury concerns
+                const injuryClass = injury.status === 'OUT' || injury.status === 'IR' ? 'injury-out' :
+                                   injury.status === 'D' ? 'injury-doubtful' : 'injury-questionable';
+                injuryBadge = `<span class="injury-badge ${injuryClass}" title="${injury.description}">${injury.status}</span>`;
+            }
         }
 
         // Defense ranking matchup
@@ -939,14 +972,27 @@ function calculateAdvancedMetrics() {
         // Injury component (-5 to -100)
         const normalizedPlayerName = normalizePlayerName(player.Name);
         if (injuryData[normalizedPlayerName]) {
-            const status = injuryData[normalizedPlayerName].status;
+            const injury = injuryData[normalizedPlayerName];
+            const status = injury.status;
+            const description = injury.description?.toLowerCase() || '';
+
+            // Check if it's informational rather than injury-related
+            const isInformational = description.includes('full') ||
+                                   description.includes('practiced fully') ||
+                                   description.includes('no injury') ||
+                                   description.includes('expected to play') ||
+                                   description.includes('cleared') ||
+                                   description.includes('activated') ||
+                                   description.includes('returned to practice');
+
             if (status === 'OUT' || status === 'IR') {
                 envScore = 0; // Unplayable
             } else if (status === 'D') {
                 envScore -= 15; // Doubtful
-            } else if (status === 'Q') {
-                envScore -= 5; // Questionable
+            } else if (status === 'Q' && !isInformational) {
+                envScore -= 5; // Questionable (only if actual injury concern)
             }
+            // No penalty for informational Q status
         }
 
         // Clamp score to 0-100
