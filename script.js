@@ -4,7 +4,7 @@ let currentLineup = {};
 let currentPosition = 'QB';
 let contestType = 'classic';
 let salaryCap = 50000;
-let currentSort = 'salary-high';
+let currentSort = 'mppk-high';
 let gameOdds = {};
 const ODDS_API_KEY = '98134e3b5435f11219c586ef3dcc3f87';
 
@@ -171,6 +171,12 @@ function getFilteredAndSortedPlayers() {
 
     // Sort based on current sort selection
     switch(currentSort) {
+        case 'mppk-high':
+            filteredPlayers.sort((a, b) => (b.mppk || b.ppk || 0) - (a.mppk || a.ppk || 0));
+            break;
+        case 'env-high':
+            filteredPlayers.sort((a, b) => (b.envScore || 0) - (a.envScore || 0));
+            break;
         case 'salary-high':
             filteredPlayers.sort((a, b) => parseInt(b.Salary) - parseInt(a.Salary));
             break;
@@ -191,7 +197,7 @@ function getFilteredAndSortedPlayers() {
             filteredPlayers.sort((a, b) => a.Name.localeCompare(b.Name));
             break;
         default:
-            filteredPlayers.sort((a, b) => parseInt(b.Salary) - parseInt(a.Salary));
+            filteredPlayers.sort((a, b) => (b.mppk || b.ppk || 0) - (a.mppk || a.ppk || 0));
     }
 
     return filteredPlayers;
@@ -199,6 +205,10 @@ function getFilteredAndSortedPlayers() {
 
 function displayPlayers() {
     const playerList = document.getElementById('playerList');
+
+    // Calculate advanced metrics before displaying
+    calculateAdvancedMetrics();
+
     const filteredPlayers = getFilteredAndSortedPlayers();
 
     if (filteredPlayers.length === 0) {
@@ -211,10 +221,29 @@ function displayPlayers() {
         const avgPts = player.AvgPointsPerGame ? parseFloat(player.AvgPointsPerGame).toFixed(1) : '-';
         const gameInfo = player['Game Info'] ? player['Game Info'].split(' ')[0] : '';
 
-        // Value indicators
-        const ppkValue = player.ppk > 0 ? player.ppk.toFixed(2) : 'N/A';
+        // Value indicators - use MPPK if available, otherwise PPK
+        const basePpk = player.ppk > 0 ? player.ppk.toFixed(2) : 'N/A';
+        const mppkValue = player.mppk > 0 ? player.mppk.toFixed(2) : basePpk;
+        const ppkDisplay = player.mppk && player.mppk !== player.ppk ?
+            `${mppkValue} <small style="color:#999;text-decoration:line-through;">${basePpk}</small>` :
+            mppkValue;
         const starIcon = player.isTopValue ? '<span class="value-star">⭐</span>' : '';
         const valueClass = player.isTopValue ? 'value-excellent' : '';
+
+        // Game Environment Score badge
+        let envScoreBadge = '';
+        if (player.envScore !== undefined) {
+            const score = Math.round(player.envScore);
+            let scoreClass = 'env-bad';
+            if (score >= 70) {
+                scoreClass = 'env-excellent';
+            } else if (score >= 55) {
+                scoreClass = 'env-good';
+            } else if (score >= 40) {
+                scoreClass = 'env-neutral';
+            }
+            envScoreBadge = `<span class="env-score ${scoreClass}" title="Game Environment Score: ${score}/100">${score}</span>`;
+        }
 
         // Injury status badge
         let injuryBadge = '';
@@ -289,14 +318,14 @@ function displayPlayers() {
         return `
             <div class="player-item ${valueClass}" onclick="addPlayerToLineup(${index})">
                 <div class="player-name">
-                    ${player.Name} ${starIcon} ${trendIcon} ${injuryBadge} ${weatherAlert}
+                    ${player.Name} ${starIcon} ${trendIcon} ${injuryBadge} ${weatherAlert} ${envScoreBadge}
                 </div>
                 <div class="player-details">
                     <span>${player.TeamAbbrev || ''} - ${player.Position}</span>
                     <span class="player-avg">${avgPts} avg ${volumeInfo}</span>
                 </div>
                 <div class="player-details">
-                    <span class="player-value">${ppkValue} PPK ${defenseMatchup}</span>
+                    <span class="player-value">${ppkDisplay} MPPK ${defenseMatchup}</span>
                     <span class="player-salary">$${salary.toLocaleString()}</span>
                 </div>
                 <div class="player-details">
@@ -489,8 +518,8 @@ function autoFillLineup() {
         currentSalary += player.salary;
     });
 
-    // Sort all players by PPK (value) descending
-    const sortedPlayers = [...players].sort((a, b) => (b.ppk || 0) - (a.ppk || 0));
+    // Sort all players by MPPK (matchup-adjusted value) descending
+    const sortedPlayers = [...players].sort((a, b) => (b.mppk || b.ppk || 0) - (a.mppk || a.ppk || 0));
 
     // Count empty slots to calculate remaining slots correctly
     const emptySlots = positions.filter((_, idx) => !currentLineup[idx]).length;
@@ -713,6 +742,116 @@ function calculateRecentPerformance() {
     });
 
     console.log('Recent performance calculated');
+}
+
+// Calculate advanced metrics (MPPK, Vegas Value, Game Environment Score)
+function calculateAdvancedMetrics() {
+    players.forEach(player => {
+        const gameInfo = player['Game Info'] ? player['Game Info'].split(' ')[0] : '';
+
+        // 1. Matchup-Adjusted PPK (MPPK)
+        let mppk = player.ppk || 0;
+        let defenseMultiplier = 1.0;
+
+        if (gameInfo && player.Position !== 'DST') {
+            const oppTeam = gameInfo.includes('@') ? gameInfo.split('@')[1] : gameInfo.split('vs')[1];
+            const defKey = `${oppTeam}_${player.Position}`;
+
+            if (defenseRankings[defKey]) {
+                const ranking = defenseRankings[defKey];
+                const percentile = ranking.rank / ranking.total;
+
+                // Top 33% worst defenses (rank > 67th percentile) = good matchup
+                if (percentile > 0.67) {
+                    defenseMultiplier = 1.20; // 20% boost for great matchup
+                }
+                // Bottom 33% (rank < 33rd percentile) = tough matchup
+                else if (percentile < 0.33) {
+                    defenseMultiplier = 0.85; // 15% penalty for tough matchup
+                }
+                // Middle 34% = neutral (1.0)
+            }
+        }
+
+        mppk = mppk * defenseMultiplier;
+
+        // 2. Vegas-Implied Player Value
+        let vegasBonus = 0;
+        let impliedTeamTotal = null;
+
+        if (gameInfo && gameOdds[gameInfo] && player.Position !== 'DST') {
+            const odds = gameOdds[gameInfo];
+            const playerTeam = player.TeamAbbrev;
+
+            // Determine which team total to use
+            if (odds.homeTeam === playerTeam && odds.homeTotal) {
+                impliedTeamTotal = parseFloat(odds.homeTotal);
+            } else if (odds.awayTeam === playerTeam && odds.awayTotal) {
+                impliedTeamTotal = parseFloat(odds.awayTotal);
+            }
+
+            // Apply Vegas bonus/penalty
+            if (impliedTeamTotal !== null) {
+                if (impliedTeamTotal >= 28) {
+                    vegasBonus = 15; // High-scoring game environment
+                } else if (impliedTeamTotal >= 24) {
+                    vegasBonus = 8; // Above average
+                } else if (impliedTeamTotal >= 20) {
+                    vegasBonus = 0; // Average
+                } else {
+                    vegasBonus = -10; // Low-scoring game
+                }
+            }
+        }
+
+        // 3. Game Environment Score (0-100)
+        let envScore = 50; // Start at baseline
+
+        // Defense matchup component (+/- 20)
+        if (defenseMultiplier > 1.0) {
+            envScore += 20; // Good matchup
+        } else if (defenseMultiplier < 1.0) {
+            envScore -= 20; // Bad matchup
+        }
+
+        // Vegas component (already calculated as vegasBonus)
+        envScore += vegasBonus;
+
+        // Weather component (-10 for bad weather)
+        if (gameInfo && weatherData[gameInfo]) {
+            const weather = weatherData[gameInfo];
+            if (!weather.indoor) {
+                const conditions = weather.conditions?.toLowerCase() || '';
+                if (conditions.includes('rain') || conditions.includes('snow')) {
+                    envScore -= 10;
+                }
+            }
+        }
+
+        // Injury component (-5 to -100)
+        if (injuryData[player.ID]) {
+            const status = injuryData[player.ID].status;
+            if (status === 'OUT' || status === 'IR') {
+                envScore = 0; // Unplayable
+            } else if (status === 'D') {
+                envScore -= 15; // Doubtful
+            } else if (status === 'Q') {
+                envScore -= 5; // Questionable
+            }
+        }
+
+        // Clamp score to 0-100
+        envScore = Math.max(0, Math.min(100, envScore));
+
+        // Store advanced metrics on player object
+        player.mppk = mppk;
+        player.vegasBonus = vegasBonus;
+        player.impliedTeamTotal = impliedTeamTotal;
+        player.envScore = envScore;
+        player.defenseMultiplier = defenseMultiplier;
+    });
+
+    console.log('Advanced metrics calculated');
 }
 
 // Fetch odds from The Odds API
