@@ -696,7 +696,58 @@ async function fetchDefenseRankings() {
 // Fetch injury data from ESPN
 async function fetchInjuryData() {
     try {
-        // Fetch injuries from ESPN scoreboard which includes injury data
+        // Try the dedicated injuries endpoint first
+        const injuryResponse = await fetch('https://site.web.api.espn.com/apis/site/v2/sports/football/nfl/injuries');
+
+        if (injuryResponse.ok) {
+            const injuryDataRaw = await injuryResponse.json();
+
+            // Clear existing injury data
+            injuryData = {};
+
+            // Parse the injuries data structure
+            const teams = injuryDataRaw.teams || [];
+
+            teams.forEach(team => {
+                const injuries = team.injuries || [];
+                injuries.forEach(injury => {
+                    const athlete = injury.athlete;
+                    if (!athlete) return;
+
+                    const playerName = athlete.displayName || athlete.fullName || '';
+                    const normalizedName = normalizePlayerName(playerName);
+
+                    // Map ESPN injury status to DFS-friendly status
+                    let status = 'Q'; // Default to Questionable
+                    const injuryStatus = injury.status?.toUpperCase() || '';
+
+                    if (injuryStatus.includes('OUT') || injuryStatus === 'IR') {
+                        status = 'OUT';
+                    } else if (injuryStatus.includes('DOUBTFUL') || injuryStatus === 'D') {
+                        status = 'D';
+                    } else if (injuryStatus.includes('QUESTIONABLE') || injuryStatus === 'Q') {
+                        status = 'Q';
+                    }
+
+                    injuryData[normalizedName] = {
+                        status: status,
+                        description: injury.longComment || injury.details?.detail || injury.type || 'Injury',
+                        originalName: playerName,
+                        team: team.team?.abbreviation || ''
+                    };
+                });
+            });
+
+            console.log('Injury data loaded:', Object.keys(injuryData).length, 'injured players');
+            if (Object.keys(injuryData).length > 0) {
+                console.log('Sample injuries:', Object.keys(injuryData).slice(0, 5).map(k => `${injuryData[k].originalName} (${injuryData[k].status})`));
+            }
+            displayPlayers();
+            return;
+        }
+
+        // Fallback to scoreboard endpoint
+        console.log('Injuries endpoint failed, trying scoreboard...');
         const response = await fetch('https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard');
         if (!response.ok) return;
 
@@ -711,7 +762,6 @@ async function fetchInjuryData() {
                 const roster = competitor.roster || [];
                 roster.forEach(player => {
                     if (player.injury) {
-                        // Normalize player name for matching (remove Jr., Sr., III, etc.)
                         const playerName = player.athlete.displayName || player.athlete.fullName || '';
                         const normalizedName = normalizePlayerName(playerName);
 
@@ -725,10 +775,7 @@ async function fetchInjuryData() {
             });
         });
 
-        console.log('Injury data loaded:', Object.keys(injuryData).length, 'injured players');
-        if (Object.keys(injuryData).length > 0) {
-            console.log('Sample injuries:', Object.keys(injuryData).slice(0, 5));
-        }
+        console.log('Injury data loaded from scoreboard:', Object.keys(injuryData).length, 'injured players');
         displayPlayers();
     } catch (error) {
         console.error('Error fetching injury data:', error);
