@@ -249,6 +249,94 @@ body {
     border-color: #ffc107 !important;
 }
 
+/* Injury status badges */
+.injury-badge {
+    display: inline-block;
+    padding: 2px 6px;
+    margin-left: 5px;
+    border-radius: 3px;
+    font-size: 0.7em;
+    font-weight: bold;
+    color: white;
+}
+
+.injury-questionable {
+    background: #ffc107;
+    color: #000;
+}
+
+.injury-doubtful {
+    background: #ff9800;
+}
+
+.injury-out {
+    background: #dc3545;
+}
+
+/* Defense matchup indicators */
+.defense-matchup {
+    display: inline-block;
+    padding: 2px 6px;
+    margin-left: 5px;
+    border-radius: 3px;
+    font-size: 0.75em;
+    font-weight: 600;
+}
+
+.matchup-good {
+    background: #28a745;
+    color: white;
+}
+
+.matchup-neutral {
+    background: #6c757d;
+    color: white;
+}
+
+.matchup-bad {
+    background: #dc3545;
+    color: white;
+}
+
+/* Performance trend icons */
+.trend-icon {
+    margin-left: 5px;
+    font-size: 1em;
+    cursor: help;
+}
+
+.trend-icon.hot {
+    animation: pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse {
+    0%, 100% {
+        transform: scale(1);
+    }
+    50% {
+        transform: scale(1.1);
+    }
+}
+
+/* Volume info */
+.volume-info {
+    color: #667eea;
+    font-weight: 600;
+    font-size: 0.85em;
+    margin-left: 5px;
+}
+
+/* Weather icons */
+.weather-icon {
+    margin-left: 5px;
+    font-size: 1em;
+    cursor: help;
+}
+
+.weather-icon.weather-bad {
+    filter: brightness(0.8);
+}
+
 .current-lineup h2 {
     margin-bottom: 15px;
     color: #333;

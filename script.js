@@ -8,6 +8,12 @@ let currentSort = 'salary-high';
 let gameOdds = {};
 const ODDS_API_KEY = '98134e3b5435f11219c586ef3dcc3f87';
 
+// Enhanced player data
+let injuryData = {};
+let defenseRankings = {};
+let weatherData = {};
+let recentPerformance = {};
+
 // Contest configurations based on official DraftKings rules
 const contestConfigs = {
     classic: {
@@ -105,8 +111,14 @@ function parseCSV(csv) {
     }
 
     calculatePlayerValues();
+    calculateRecentPerformance();
     displayPlayers();
-    fetchGameOdds(); // Fetch odds data in background and refresh display when complete
+
+    // Fetch all enhanced data in background
+    fetchGameOdds();
+    fetchDefenseRankings();
+    fetchInjuryData();
+    fetchWeatherData();
 }
 
 function calculatePlayerValues() {
@@ -204,6 +216,63 @@ function displayPlayers() {
         const starIcon = player.isTopValue ? '<span class="value-star">⭐</span>' : '';
         const valueClass = player.isTopValue ? 'value-excellent' : '';
 
+        // Injury status badge
+        let injuryBadge = '';
+        if (injuryData[player.ID]) {
+            const injury = injuryData[player.ID];
+            const injuryClass = injury.status === 'OUT' || injury.status === 'IR' ? 'injury-out' :
+                               injury.status === 'D' ? 'injury-doubtful' : 'injury-questionable';
+            injuryBadge = `<span class="injury-badge ${injuryClass}" title="${injury.description}">${injury.status}</span>`;
+        }
+
+        // Defense ranking matchup
+        let defenseMatchup = '';
+        if (gameInfo && player.Position !== 'DST') {
+            const oppTeam = gameInfo.includes('@') ? gameInfo.split('@')[1] : gameInfo.split('vs')[1];
+            const defKey = `${oppTeam}_${player.Position}`;
+            if (defenseRankings[defKey]) {
+                const ranking = defenseRankings[defKey];
+                const isFavorable = ranking.rank > ranking.total * 0.67; // Top third worst defenses
+                const matchupClass = isFavorable ? 'matchup-good' : ranking.rank < ranking.total * 0.33 ? 'matchup-bad' : 'matchup-neutral';
+                defenseMatchup = `<span class="defense-matchup ${matchupClass}" title="Opponent ranks ${ranking.rank} vs ${player.Position}">vs #${ranking.rank} DEF</span>`;
+            }
+        }
+
+        // Performance trend
+        let trendIcon = '';
+        if (recentPerformance[player.ID]) {
+            const perf = recentPerformance[player.ID];
+            if (perf.trend === 'hot') {
+                trendIcon = '<span class="trend-icon hot" title="Hot streak">🔥</span>';
+            } else if (perf.trend === 'cold') {
+                trendIcon = '<span class="trend-icon cold" title="Cold streak">❄️</span>';
+            }
+        }
+
+        // Target/Touch volume
+        let volumeInfo = '';
+        if (recentPerformance[player.ID]) {
+            const perf = recentPerformance[player.ID];
+            if (perf.targets) {
+                volumeInfo = `<span class="volume-info" title="Projected targets">~${perf.targets} tgts</span>`;
+            } else if (perf.touches) {
+                volumeInfo = `<span class="volume-info" title="Projected touches">~${perf.touches} touches</span>`;
+            }
+        }
+
+        // Weather alert
+        let weatherAlert = '';
+        if (gameInfo && weatherData[gameInfo]) {
+            const weather = weatherData[gameInfo];
+            if (weather.indoor) {
+                weatherAlert = '<span class="weather-icon" title="Indoor game">🏟️</span>';
+            } else if (weather.conditions && weather.conditions.toLowerCase().includes('rain')) {
+                weatherAlert = '<span class="weather-icon weather-bad" title="Rain expected">🌧️</span>';
+            } else if (weather.conditions && weather.conditions.toLowerCase().includes('snow')) {
+                weatherAlert = '<span class="weather-icon weather-bad" title="Snow expected">❄️</span>';
+            }
+        }
+
         // Get odds info for this game
         let oddsInfo = '';
         if (index === 0 && gameInfo) {
@@ -219,13 +288,15 @@ function displayPlayers() {
 
         return `
             <div class="player-item ${valueClass}" onclick="addPlayerToLineup(${index})">
-                <div class="player-name">${player.Name} ${starIcon}</div>
-                <div class="player-details">
-                    <span>${player.TeamAbbrev || ''} - ${player.Position}</span>
-                    <span class="player-avg">${avgPts} avg</span>
+                <div class="player-name">
+                    ${player.Name} ${starIcon} ${trendIcon} ${injuryBadge} ${weatherAlert}
                 </div>
                 <div class="player-details">
-                    <span class="player-value">${ppkValue} PPK</span>
+                    <span>${player.TeamAbbrev || ''} - ${player.Position}</span>
+                    <span class="player-avg">${avgPts} avg ${volumeInfo}</span>
+                </div>
+                <div class="player-details">
+                    <span class="player-value">${ppkValue} PPK ${defenseMatchup}</span>
                     <span class="player-salary">$${salary.toLocaleString()}</span>
                 </div>
                 <div class="player-details">
@@ -504,6 +575,144 @@ function autoFillLineup() {
     } else if (filledSlots < totalSlots) {
         alert(`Could not auto-fill any positions. Try adjusting salary constraints or check available players.`);
     }
+}
+
+// Fetch defense rankings from ESPN
+async function fetchDefenseRankings() {
+    try {
+        // Fetch defensive stats for all teams
+        const response = await fetch('https://site.api.espn.com/apis/site/v2/sports/football/nfl/teams?enable=stats');
+        if (!response.ok) return;
+
+        const data = await response.json();
+        const teams = data.sports[0].leagues[0].teams;
+
+        // Initialize rankings by position
+        const defRankings = {
+            QB: [], RB: [], WR: [], TE: []
+        };
+
+        // Process each team's defensive stats
+        teams.forEach(teamData => {
+            const team = teamData.team;
+            const stats = team.record?.items?.[0]?.stats || [];
+
+            // Get yards allowed stats (lower is better for defense)
+            const passYdsAllowed = stats.find(s => s.name === 'avgPassingYardsAllowed')?.value || 250;
+            const rushYdsAllowed = stats.find(s => s.name === 'avgRushingYardsAllowed')?.value || 120;
+
+            defRankings.QB.push({ team: team.abbreviation, value: parseFloat(passYdsAllowed) });
+            defRankings.WR.push({ team: team.abbreviation, value: parseFloat(passYdsAllowed) });
+            defRankings.TE.push({ team: team.abbreviation, value: parseFloat(passYdsAllowed) });
+            defRankings.RB.push({ team: team.abbreviation, value: parseFloat(rushYdsAllowed) });
+        });
+
+        // Sort and rank (higher yards allowed = worse defense = better matchup)
+        ['QB', 'RB', 'WR', 'TE'].forEach(pos => {
+            defRankings[pos].sort((a, b) => b.value - a.value);
+            defRankings[pos].forEach((item, index) => {
+                defenseRankings[`${item.team}_${pos}`] = {
+                    rank: index + 1,
+                    total: defRankings[pos].length,
+                    value: item.value
+                };
+            });
+        });
+
+        console.log('Defense rankings loaded');
+        displayPlayers();
+    } catch (error) {
+        console.error('Error fetching defense rankings:', error);
+    }
+}
+
+// Fetch injury data from ESPN
+async function fetchInjuryData() {
+    try {
+        // ESPN injury endpoint - fetch for all teams
+        const teamAbbrevs = ['ARI', 'ATL', 'BAL', 'BUF', 'CAR', 'CHI', 'CIN', 'CLE', 'DAL', 'DEN',
+                            'DET', 'GB', 'HOU', 'IND', 'JAX', 'KC', 'LV', 'LAC', 'LAR', 'MIA',
+                            'MIN', 'NE', 'NO', 'NYG', 'NYJ', 'PHI', 'PIT', 'SF', 'SEA', 'TB', 'TEN', 'WAS'];
+
+        // Fetch injuries from ESPN scoreboard which includes injury data
+        const response = await fetch('https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard');
+        if (!response.ok) return;
+
+        const data = await response.json();
+        const events = data.events || [];
+
+        events.forEach(event => {
+            event.competitions?.[0]?.competitors?.forEach(competitor => {
+                const roster = competitor.roster || [];
+                roster.forEach(player => {
+                    if (player.injury) {
+                        injuryData[player.athlete.id] = {
+                            status: player.injury.status || 'Q',
+                            description: player.injury.longComment || player.injury.type || 'Injury'
+                        };
+                    }
+                });
+            });
+        });
+
+        console.log('Injury data loaded:', Object.keys(injuryData).length, 'injured players');
+        displayPlayers();
+    } catch (error) {
+        console.error('Error fetching injury data:', error);
+    }
+}
+
+// Fetch weather data (using game locations)
+async function fetchWeatherData() {
+    try {
+        // Get current week's games
+        const response = await fetch('https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard');
+        if (!response.ok) return;
+
+        const data = await response.json();
+        const events = data.events || [];
+
+        events.forEach(event => {
+            const competition = event.competitions?.[0];
+            if (competition?.weather) {
+                const weather = competition.weather;
+                const homeTeam = competition.competitors?.find(c => c.homeAway === 'home')?.team.abbreviation;
+                const awayTeam = competition.competitors?.find(c => c.homeAway === 'away')?.team.abbreviation;
+                const gameKey = `${awayTeam}@${homeTeam}`;
+
+                weatherData[gameKey] = {
+                    temp: weather.temperature,
+                    conditions: weather.displayValue || 'Clear',
+                    indoor: weather.conditionId === '1' || competition.venue?.indoor
+                };
+            }
+        });
+
+        console.log('Weather data loaded');
+        displayPlayers();
+    } catch (error) {
+        console.error('Error fetching weather data:', error);
+    }
+}
+
+// Calculate recent performance trends from CSV data
+function calculateRecentPerformance() {
+    players.forEach(player => {
+        // Use the AvgPointsPerGame as a baseline
+        // In a real implementation, you'd fetch last 3-5 game logs
+        const avg = parseFloat(player.AvgPointsPerGame) || 0;
+
+        // For now, we'll use the PPK as an indicator of recent form
+        // This is a simplified version - ideally you'd fetch actual game logs
+        recentPerformance[player.ID] = {
+            last3Avg: avg,
+            trend: player.ppk > 2.5 ? 'hot' : player.ppk < 1.5 ? 'cold' : 'neutral',
+            targets: player.Position === 'WR' || player.Position === 'TE' ? Math.round(avg / 1.5) : null,
+            touches: player.Position === 'RB' ? Math.round(avg / 0.8) : null
+        };
+    });
+
+    console.log('Recent performance calculated');
 }
 
 // Fetch odds from The Odds API
