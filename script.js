@@ -226,10 +226,14 @@ function displayPlayers() {
         const mppkValue = player.mppk > 0 ? player.mppk.toFixed(2) : basePpk;
 
         // Build tooltip explaining the value
-        let valueTooltip = 'Matchup-Adjusted Points Per $1K';
+        let valueTooltip = 'Matchup-Adjusted PPK: Base value adjusted for defensive matchup strength. ';
         if (player.mppk && player.mppk !== player.ppk) {
             const multiplier = ((player.mppk / player.ppk - 1) * 100).toFixed(0);
-            valueTooltip += ` (${multiplier > 0 ? '+' : ''}${multiplier}% from matchup)`;
+            const multDesc = player.defenseMultiplier > 1.0 ? 'boost vs weak defense' :
+                           player.defenseMultiplier < 1.0 ? 'penalty vs strong defense' : 'neutral matchup';
+            valueTooltip += `${multiplier > 0 ? '+' : ''}${multiplier}% ${multDesc} (×${player.defenseMultiplier.toFixed(2)})`;
+        } else {
+            valueTooltip += 'No matchup data available yet.';
         }
 
         const ppkDisplay = player.mppk && player.mppk !== player.ppk ?
@@ -250,7 +254,31 @@ function displayPlayers() {
             } else if (score >= 40) {
                 scoreClass = 'env-neutral';
             }
-            envScoreBadge = `<span class="env-score ${scoreClass}" title="Game Environment Score: ${score}/100">${score}</span>`;
+
+            // Build detailed tooltip explaining the calculation
+            let envTooltip = `Game Environment Score: ${score}/100\n\n`;
+            envTooltip += 'Calculation: Base(50) ';
+            if (player.defenseMultiplier > 1.0) envTooltip += '+ Defense(+20) ';
+            else if (player.defenseMultiplier < 1.0) envTooltip += '+ Defense(-20) ';
+            if (player.vegasBonus !== undefined && player.vegasBonus !== 0) {
+                envTooltip += `+ Vegas(${player.vegasBonus > 0 ? '+' : ''}${player.vegasBonus}) `;
+            }
+            const hasWeather = gameInfo && weatherData[gameInfo];
+            if (hasWeather && !weatherData[gameInfo].indoor) {
+                const conditions = weatherData[gameInfo].conditions?.toLowerCase() || '';
+                if (conditions.includes('rain') || conditions.includes('snow')) {
+                    envTooltip += '+ Weather(-10) ';
+                }
+            }
+            if (injuryData[player.ID]) {
+                const status = injuryData[player.ID].status;
+                if (status === 'Q') envTooltip += '+ Injury(-5) ';
+                else if (status === 'D') envTooltip += '+ Injury(-15) ';
+                else if (status === 'OUT' || status === 'IR') envTooltip += '+ Injury(-100) ';
+            }
+            envTooltip += `= ${score}`;
+
+            envScoreBadge = `<span class="env-score ${scoreClass}" title="${envTooltip}">${score}</span>`;
         }
 
         // Injury status badge
