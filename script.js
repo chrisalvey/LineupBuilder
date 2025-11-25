@@ -711,34 +711,38 @@ async function fetchInjuryData() {
             // Clear existing injury data
             injuryData = {};
 
-            // Parse the injuries array (it's directly at top level, not nested in teams)
-            const injuries = injuryDataRaw.injuries || [];
+            // Parse the injuries array - each item is a team with nested injuries
+            const teams = injuryDataRaw.injuries || [];
 
-            injuries.forEach(injury => {
-                const athlete = injury.athlete;
-                if (!athlete) return;
+            teams.forEach(teamObj => {
+                const teamInjuries = teamObj.injuries || [];
 
-                const playerName = athlete.displayName || athlete.fullName || '';
-                const normalizedName = normalizePlayerName(playerName);
+                teamInjuries.forEach(injury => {
+                    const athlete = injury.athlete;
+                    if (!athlete) return;
 
-                // Map ESPN injury status to DFS-friendly status
-                let status = 'Q'; // Default to Questionable
-                const injuryStatus = injury.status?.toUpperCase() || '';
+                    const playerName = athlete.displayName || athlete.fullName || '';
+                    const normalizedName = normalizePlayerName(playerName);
 
-                if (injuryStatus.includes('OUT') || injuryStatus === 'IR') {
-                    status = 'OUT';
-                } else if (injuryStatus.includes('DOUBTFUL') || injuryStatus === 'D') {
-                    status = 'D';
-                } else if (injuryStatus.includes('QUESTIONABLE') || injuryStatus === 'Q') {
-                    status = 'Q';
-                }
+                    // Map ESPN injury status to DFS-friendly status
+                    let status = 'Q'; // Default to Questionable
+                    const injuryStatus = injury.status?.toUpperCase() || '';
 
-                injuryData[normalizedName] = {
-                    status: status,
-                    description: injury.longComment || injury.details?.detail || injury.type || 'Injury',
-                    originalName: playerName,
-                    team: injury.team?.abbreviation || athlete.team?.abbreviation || ''
-                };
+                    if (injuryStatus.includes('OUT') || injuryStatus === 'IR') {
+                        status = 'OUT';
+                    } else if (injuryStatus.includes('DOUBTFUL') || injuryStatus === 'D') {
+                        status = 'D';
+                    } else if (injuryStatus.includes('QUESTIONABLE') || injuryStatus === 'Q') {
+                        status = 'Q';
+                    }
+
+                    injuryData[normalizedName] = {
+                        status: status,
+                        description: injury.longComment || injury.details?.detail || injury.type || 'Injury',
+                        originalName: playerName,
+                        team: teamObj.displayName || ''
+                    };
+                });
             });
 
             console.log('Injury data loaded:', Object.keys(injuryData).length, 'injured players');
