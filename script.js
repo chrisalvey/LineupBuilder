@@ -4,7 +4,7 @@ let currentLineup = {};
 let currentPosition = 'QB';
 let contestType = 'classic';
 let salaryCap = 50000;
-let currentSort = 'mppk-high';
+let currentSort = 'dfs-high';
 let gameOdds = {};
 const ODDS_API_KEY = '98134e3b5435f11219c586ef3dcc3f87';
 
@@ -171,11 +171,11 @@ function getFilteredAndSortedPlayers() {
 
     // Sort based on current sort selection
     switch(currentSort) {
+        case 'dfs-high':
+            filteredPlayers.sort((a, b) => (b.dfsScore || 0) - (a.dfsScore || 0));
+            break;
         case 'mppk-high':
             filteredPlayers.sort((a, b) => (b.mppk || b.ppk || 0) - (a.mppk || a.ppk || 0));
-            break;
-        case 'env-high':
-            filteredPlayers.sort((a, b) => (b.envScore || 0) - (a.envScore || 0));
             break;
         case 'salary-high':
             filteredPlayers.sort((a, b) => parseInt(b.Salary) - parseInt(a.Salary));
@@ -197,7 +197,7 @@ function getFilteredAndSortedPlayers() {
             filteredPlayers.sort((a, b) => a.Name.localeCompare(b.Name));
             break;
         default:
-            filteredPlayers.sort((a, b) => (b.mppk || b.ppk || 0) - (a.mppk || a.ppk || 0));
+            filteredPlayers.sort((a, b) => (b.dfsScore || 0) - (a.dfsScore || 0));
     }
 
     return filteredPlayers;
@@ -242,10 +242,10 @@ function displayPlayers() {
         const starIcon = player.isTopValue ? '<span class="value-star" title="Top 10% value for position">⭐</span>' : '';
         const valueClass = player.isTopValue ? 'value-excellent' : '';
 
-        // Game Environment Score badge
-        let envScoreBadge = '';
-        if (player.envScore !== undefined) {
-            const score = Math.round(player.envScore);
+        // Overall DFS Score badge
+        let dfsScoreBadge = '';
+        if (player.dfsScore !== undefined) {
+            const score = Math.round(player.dfsScore);
             let scoreClass = 'env-bad';
             if (score >= 70) {
                 scoreClass = 'env-excellent';
@@ -255,55 +255,29 @@ function displayPlayers() {
                 scoreClass = 'env-neutral';
             }
 
-            // Build detailed tooltip explaining the Vegas-only calculation
-            let envTooltip = `Game Environment Score: ${score}/100\n\n`;
-            envTooltip += 'Vegas-Based Game Conditions:\n';
-            envTooltip += 'Base(50) ';
+            // Build detailed tooltip explaining all components
+            let dfsTooltip = `Overall DFS Score: ${score}/100\n\nComposite Score Breakdown:\n`;
 
-            // Implied Team Total component
-            if (player.impliedTeamTotal !== null && player.impliedTeamTotal !== undefined) {
-                const totalContribution = Math.round(((player.impliedTeamTotal - 22.5) / 7.5) * 25);
-                envTooltip += `+ Team Total(${totalContribution > 0 ? '+' : ''}${totalContribution}) `;
+            // Show all 6 components
+            dfsTooltip += `• Value (MPPK ${player.mppk ? player.mppk.toFixed(2) : 'N/A'}): 30% weight\n`;
+            dfsTooltip += `• Performance (${parseFloat(player.AvgPointsPerGame || 0).toFixed(1)} avg): 25% weight\n`;
+            dfsTooltip += `• Game Conditions (${player.impliedTeamTotal ? player.impliedTeamTotal.toFixed(1) + ' team total' : 'N/A'}): 20% weight\n`;
+            dfsTooltip += `• Game Script (${player.playerSpread !== null ? (player.playerSpread > 0 ? '+' : '') + player.playerSpread.toFixed(1) + ' spread' : 'N/A'}): 15% weight\n`;
+
+            if (recentPerformance[player.ID]) {
+                const trend = recentPerformance[player.ID].trend;
+                dfsTooltip += `• Recent Trend (${trend}): 5% weight\n`;
             }
 
-            // Game Total/Pace component
-            if (player.gameTotal !== null && player.gameTotal !== undefined) {
-                let paceContribution = 0;
-                if (player.gameTotal >= 50) paceContribution = 12;
-                else if (player.gameTotal >= 46) paceContribution = 6;
-                else if (player.gameTotal >= 38) paceContribution = -6;
-                else if (player.gameTotal < 38) paceContribution = -12;
-
-                if (paceContribution !== 0) {
-                    envTooltip += `+ Pace(${paceContribution > 0 ? '+' : ''}${paceContribution}) `;
-                }
+            const normalizedPlayerName = normalizePlayerName(player.Name);
+            if (injuryData[normalizedPlayerName]) {
+                const injury = injuryData[normalizedPlayerName];
+                dfsTooltip += `• Injury Status (${injury.status}): 5% penalty\n`;
             }
 
-            // Game Script/Spread component
-            if (player.playerSpread !== null && player.playerSpread !== undefined) {
-                let scriptContribution = 0;
-                const pos = player.Position;
+            dfsTooltip += `\nHigher score = better DFS play`;
 
-                if (['WR', 'TE', 'QB'].includes(pos)) {
-                    if (player.playerSpread > 7) scriptContribution = 12;
-                    else if (player.playerSpread > 3) scriptContribution = 6;
-                    else if (player.playerSpread < -10) scriptContribution = -8;
-                    else if (player.playerSpread < -6) scriptContribution = -4;
-                } else if (pos === 'RB') {
-                    if (player.playerSpread < -7) scriptContribution = 12;
-                    else if (player.playerSpread < -3) scriptContribution = 6;
-                    else if (player.playerSpread > 10) scriptContribution = -8;
-                    else if (player.playerSpread > 6) scriptContribution = -4;
-                }
-
-                if (scriptContribution !== 0) {
-                    envTooltip += `+ Script(${scriptContribution > 0 ? '+' : ''}${scriptContribution}) `;
-                }
-            }
-
-            envTooltip += `= ${score}`;
-
-            envScoreBadge = `<span class="env-score ${scoreClass}" title="${envTooltip}">${score}</span>`;
+            dfsScoreBadge = `<span class="env-score ${scoreClass}" title="${dfsTooltip}">${score}</span>`;
         }
 
         // Injury/Info status badge
@@ -396,8 +370,9 @@ function displayPlayers() {
 
         return `
             <div class="player-item ${valueClass}" onclick="addPlayerToLineup(${index})">
+                ${dfsScoreBadge}
                 <div class="player-name">
-                    ${player.Name} ${starIcon} ${trendIcon} ${injuryBadge} ${weatherAlert} ${envScoreBadge}
+                    ${player.Name} ${starIcon} ${trendIcon} ${injuryBadge} ${weatherAlert}
                 </div>
                 <div class="player-details">
                     <span>${player.TeamAbbrev || ''} - ${player.Position}</span>
@@ -979,68 +954,107 @@ function calculateAdvancedMetrics() {
             }
         }
 
-        // 3. Game Environment Score (0-100) - Vegas-Only Approach
-        let envScore = 50; // Start at baseline
+        // 3. Overall DFS Score (0-100) - Composite Player + Game Quality
+        let dfsScore = 50; // Start at baseline
         let gameTotal = null;
         let playerSpread = null;
 
+        // COMPONENT 1: Player Value (MPPK) - 30% weight (±25 points)
+        // Normalize MPPK to score contribution
+        if (mppk > 0) {
+            // Scale: 4.0 MPPK = max (+25), 0.5 MPPK = min (-25)
+            const mppkContribution = ((mppk - 2.0) / 1.5) * 25;
+            dfsScore += Math.max(-25, Math.min(25, mppkContribution));
+        } else {
+            dfsScore -= 25; // No value = big penalty
+        }
+
+        // COMPONENT 2: Player Performance (Avg Points) - 25% weight (±20 points)
+        const avgPoints = parseFloat(player.AvgPointsPerGame) || 0;
+        if (avgPoints > 0) {
+            // Scale: 25+ avg = max (+20), 0-5 avg = min (-20)
+            const avgContribution = ((avgPoints - 12.5) / 12.5) * 20;
+            dfsScore += Math.max(-20, Math.min(20, avgContribution));
+        } else {
+            dfsScore -= 20; // No production = penalty
+        }
+
+        // COMPONENT 3: Game Conditions (Vegas) - 20% weight (±15 points)
         if (gameInfo && gameOdds[gameInfo] && player.Position !== 'DST') {
             const odds = gameOdds[gameInfo];
 
-            // PRIMARY: Implied Team Total (scales 15-30 pts to contribute -25 to +25)
+            // Team Total (10 points)
             if (impliedTeamTotal !== null) {
-                const totalContribution = ((impliedTeamTotal - 22.5) / 7.5) * 25; // Center at 22.5
-                envScore += totalContribution;
+                const totalContribution = ((impliedTeamTotal - 22.5) / 7.5) * 10; // Center at 22.5
+                dfsScore += Math.max(-10, Math.min(10, totalContribution));
             }
 
-            // SECONDARY: Game Total/Pace (O/U indicates opportunity volume)
+            // Game Pace (5 points)
             if (odds.total !== null) {
                 gameTotal = parseFloat(odds.total);
                 if (gameTotal >= 50) {
-                    envScore += 12; // Fast-paced, lots of opportunities
+                    dfsScore += 5; // Fast game
                 } else if (gameTotal >= 46) {
-                    envScore += 6;
-                } else if (gameTotal >= 42) {
-                    envScore += 0;
-                } else if (gameTotal >= 38) {
-                    envScore -= 6;
-                } else {
-                    envScore -= 12; // Slow-paced, fewer opportunities
-                }
-            }
-
-            // TERTIARY: Game Script (spread-based, position-specific)
-            playerSpread = getPlayerTeamSpread(player, gameInfo);
-            if (playerSpread !== null) {
-                // Pass-catchers (WR/TE/QB) benefit from being underdogs (more passing when trailing)
-                if (['WR', 'TE', 'QB'].includes(player.Position)) {
-                    if (playerSpread > 7) {
-                        envScore += 12; // Big underdog
-                    } else if (playerSpread > 3) {
-                        envScore += 6; // Small underdog
-                    } else if (playerSpread < -10) {
-                        envScore -= 8; // Big favorite
-                    } else if (playerSpread < -6) {
-                        envScore -= 4; // Small favorite
-                    }
-                }
-                // RBs benefit from being favorites (more rushing when leading)
-                else if (player.Position === 'RB') {
-                    if (playerSpread < -7) {
-                        envScore += 12; // Big favorite
-                    } else if (playerSpread < -3) {
-                        envScore += 6; // Small favorite
-                    } else if (playerSpread > 10) {
-                        envScore -= 8; // Big underdog
-                    } else if (playerSpread > 6) {
-                        envScore -= 4; // Small underdog
-                    }
+                    dfsScore += 2;
+                } else if (gameTotal <= 38) {
+                    dfsScore -= 5; // Slow game
+                } else if (gameTotal <= 42) {
+                    dfsScore -= 2;
                 }
             }
         }
 
+        // COMPONENT 4: Game Script (Spread) - 15% weight (±10 points)
+        if (gameInfo && gameOdds[gameInfo] && player.Position !== 'DST') {
+            playerSpread = getPlayerTeamSpread(player, gameInfo);
+            if (playerSpread !== null) {
+                if (['WR', 'TE', 'QB'].includes(player.Position)) {
+                    if (playerSpread > 7) dfsScore += 10; // Big underdog
+                    else if (playerSpread > 3) dfsScore += 5;
+                    else if (playerSpread < -10) dfsScore -= 6;
+                    else if (playerSpread < -6) dfsScore -= 3;
+                } else if (player.Position === 'RB') {
+                    if (playerSpread < -7) dfsScore += 10; // Big favorite
+                    else if (playerSpread < -3) dfsScore += 5;
+                    else if (playerSpread > 10) dfsScore -= 6;
+                    else if (playerSpread > 6) dfsScore -= 3;
+                }
+            }
+        }
+
+        // COMPONENT 5: Recent Performance Trend - 5% weight (±5 points)
+        if (recentPerformance[player.ID]) {
+            const trend = recentPerformance[player.ID].trend;
+            if (trend === 'hot') dfsScore += 5;
+            else if (trend === 'cold') dfsScore -= 5;
+        }
+
+        // COMPONENT 6: Injury Status - 5% weight (penalty only, -5 to -100)
+        const normalizedPlayerName = normalizePlayerName(player.Name);
+        if (injuryData[normalizedPlayerName]) {
+            const injury = injuryData[normalizedPlayerName];
+            const status = injury.status;
+            const description = injury.description?.toLowerCase() || '';
+
+            const isInformational = description.includes('full') ||
+                                   description.includes('practiced fully') ||
+                                   description.includes('no injury') ||
+                                   description.includes('expected to play') ||
+                                   description.includes('cleared') ||
+                                   description.includes('activated') ||
+                                   description.includes('returned to practice');
+
+            if (status === 'OUT' || status === 'IR') {
+                dfsScore = 0; // Unplayable
+            } else if (status === 'D') {
+                dfsScore -= 15; // Doubtful
+            } else if (status === 'Q' && !isInformational) {
+                dfsScore -= 5; // Questionable
+            }
+        }
+
         // Clamp score to 0-100
-        envScore = Math.max(0, Math.min(100, envScore));
+        dfsScore = Math.max(0, Math.min(100, dfsScore));
 
         // Store advanced metrics on player object
         player.mppk = mppk;
@@ -1048,7 +1062,7 @@ function calculateAdvancedMetrics() {
         player.impliedTeamTotal = impliedTeamTotal;
         player.gameTotal = gameTotal;
         player.playerSpread = playerSpread;
-        player.envScore = envScore;
+        player.dfsScore = dfsScore; // Overall DFS Score (renamed from envScore)
         player.defenseMultiplier = defenseMultiplier;
     });
 
