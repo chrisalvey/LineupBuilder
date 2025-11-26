@@ -59,8 +59,9 @@ function initializeEventListeners() {
         displayPlayers();
     });
 
-    // Auto-fill and clear buttons
+    // Auto-fill, analyze, and clear buttons
     document.getElementById('autoFillBtn').addEventListener('click', autoFillLineup);
+    document.getElementById('analyzeBtn').addEventListener('click', analyzeLineup);
     document.getElementById('clearLineupBtn').addEventListener('click', clearLineup);
 
     // Position tabs
@@ -541,6 +542,16 @@ function updateSalaryDisplay() {
     document.getElementById('salaryRemaining').textContent = `$${remaining.toLocaleString()}`;
     document.getElementById('salaryRemaining').style.color = remaining < 0 ? '#dc3545' : '#667eea';
     document.getElementById('avgRemaining').textContent = `$${avgRemaining.toLocaleString()}`;
+
+    // Enable/disable analyze button based on lineup completion
+    const analyzeBtn = document.getElementById('analyzeBtn');
+    if (filledSlots === totalSlots) {
+        analyzeBtn.disabled = false;
+    } else {
+        analyzeBtn.disabled = true;
+        // Hide analysis results if lineup is no longer full
+        document.getElementById('analysisResults').style.display = 'none';
+    }
 }
 
 // Clear lineup
@@ -667,6 +678,189 @@ function autoFillLineup() {
     } else if (filledSlots < totalSlots) {
         alert(`Could not auto-fill any positions. Try adjusting salary constraints or check available players.`);
     }
+}
+
+// Analyze lineup for DFS best practices
+function analyzeLineup() {
+    const lineupArray = Object.values(currentLineup);
+    const redFlags = [];
+    const greenFlags = [];
+
+    // Get full player objects with all data
+    const lineupPlayers = lineupArray.map(slot => {
+        const fullPlayer = players.find(p => p.ID === slot.id);
+        return { ...slot, ...fullPlayer };
+    });
+
+    // Calculate total salary
+    const totalSalary = lineupArray.reduce((sum, player) => sum + player.salary, 0);
+    const remainingSalary = salaryCap - totalSalary;
+
+    // RED FLAG 1: Poor Salary Cap Usage
+    if (remainingSalary > 1000) {
+        redFlags.push({
+            title: 'Poor Salary Usage',
+            description: `You have $${remainingSalary.toLocaleString()} remaining. Try to get closer to the $50k cap for maximum value.`
+        });
+    }
+
+    // Find QB in lineup
+    const qb = lineupPlayers.find(p => p.position === 'QB');
+
+    // RED FLAG 2 & GREEN FLAG 1: QB Stacking
+    if (qb) {
+        const qbTeammates = lineupPlayers.filter(p =>
+            p.team === qb.team && p.position !== 'QB' && ['WR', 'TE', 'RB'].includes(p.position)
+        );
+
+        if (qbTeammates.length === 0) {
+            redFlags.push({
+                title: 'No QB Stack',
+                description: `Your QB (${qb.name}) has no pass-catchers from ${qb.team}. QB-WR correlation is crucial in DFS.`
+            });
+        } else if (qbTeammates.length >= 2) {
+            greenFlags.push({
+                title: 'Strong QB Stack',
+                description: `QB ${qb.name} stacked with ${qbTeammates.length} teammates (${qbTeammates.map(p => p.name).join(', ')}). This is optimal!`
+            });
+
+            // Check for bring-back (opponent player in same game)
+            const qbGame = qb['Game Info'] ? qb['Game Info'].split(' ')[0] : '';
+            if (qbGame) {
+                const opponentTeam = qbGame.includes('@')
+                    ? (qb.team === qbGame.split('@')[0] ? qbGame.split('@')[1] : qbGame.split('@')[0])
+                    : (qb.team === qbGame.split('vs')[0] ? qbGame.split('vs')[1] : qbGame.split('vs')[0]);
+
+                const bringBack = lineupPlayers.find(p => p.team === opponentTeam);
+
+                if (bringBack) {
+                    greenFlags.push({
+                        title: 'Game Stack with Bring-Back',
+                        description: `You have ${bringBack.name} from ${opponentTeam} to correlate with your ${qb.team} stack. Perfect for shootouts!`
+                    });
+                } else {
+                    redFlags.push({
+                        title: 'Missing Bring-Back',
+                        description: `You have a QB + 2 teammate stack but no player from the opposing team. Add a bring-back for optimal game stack.`
+                    });
+                }
+            }
+        } else {
+            // 1 teammate - decent but could be better
+            greenFlags.push({
+                title: 'QB Stack Present',
+                description: `QB ${qb.name} stacked with ${qbTeammates[0].name}. Consider adding another ${qb.team} pass-catcher for stronger correlation.`
+            });
+        }
+    }
+
+    // RED FLAG 3: Same-Position Teammates Without QB
+    const teamCounts = {};
+    lineupPlayers.forEach(p => {
+        if (!teamCounts[p.team]) {
+            teamCounts[p.team] = { WR: [], RB: [], TE: [], hasQB: false };
+        }
+        if (p.position === 'QB') teamCounts[p.team].hasQB = true;
+        if (['WR', 'RB', 'TE'].includes(p.position)) {
+            teamCounts[p.team][p.position].push(p.name);
+        }
+    });
+
+    Object.keys(teamCounts).forEach(team => {
+        const teamData = teamCounts[team];
+        ['WR', 'RB'].forEach(pos => {
+            if (teamData[pos].length >= 2 && !teamData.hasQB) {
+                redFlags.push({
+                    title: 'Negative Correlation',
+                    description: `You have ${teamData[pos].length} ${pos}s from ${team} (${teamData[pos].join(', ')}) without their QB. They'll cannibalize each other's points.`
+                });
+            }
+        });
+    });
+
+    // RED FLAG 5: Expensive Defense
+    const dst = lineupPlayers.find(p => p.position === 'DST');
+    if (dst && dst.salary > 3500) {
+        redFlags.push({
+            title: 'Expensive Defense',
+            description: `Your defense costs $${dst.salary.toLocaleString()}. Defenses are volatile - consider downgrading to add value elsewhere.`
+        });
+    }
+
+    // GREEN FLAG 2: Optimal Salary Usage
+    if (remainingSalary < 500) {
+        greenFlags.push({
+            title: 'Excellent Salary Usage',
+            description: `Only $${remainingSalary} left unused. You're maximizing your salary cap value!`
+        });
+    }
+
+    // GREEN FLAG 4: Game Diversity
+    const games = new Set();
+    lineupPlayers.forEach(p => {
+        const game = p['Game Info'] ? p['Game Info'].split(' ')[0] : '';
+        if (game) games.add(game);
+    });
+
+    if (games.size >= 3) {
+        greenFlags.push({
+            title: 'Good Game Diversity',
+            description: `Your lineup spans ${games.size} different games. Good diversification!`
+        });
+    } else if (games.size <= 2) {
+        redFlags.push({
+            title: 'Limited Game Exposure',
+            description: `Your lineup only covers ${games.size} game(s). Consider diversifying across more games.`
+        });
+    }
+
+    // Display results
+    displayAnalysisResults(redFlags, greenFlags);
+}
+
+// Display analysis results
+function displayAnalysisResults(redFlags, greenFlags) {
+    const resultsDiv = document.getElementById('analysisResults');
+
+    // Calculate score (green flags add points, red flags subtract)
+    const score = Math.max(0, Math.min(10, 5 + greenFlags.length - redFlags.length));
+
+    let html = `
+        <div class="analysis-header">
+            <h3>Lineup Analysis</h3>
+            <div class="lineup-score">
+                <span class="score-label">Quality Score:</span>
+                <span class="score-value ${score >= 7 ? 'score-good' : score >= 4 ? 'score-ok' : 'score-bad'}">${score}/10</span>
+            </div>
+        </div>
+    `;
+
+    if (redFlags.length > 0) {
+        html += '<div class="analysis-section red-flags">';
+        html += '<h4>🚨 Issues to Address</h4>';
+        html += '<ul>';
+        redFlags.forEach(flag => {
+            html += `<li><strong>${flag.title}:</strong> ${flag.description}</li>`;
+        });
+        html += '</ul></div>';
+    }
+
+    if (greenFlags.length > 0) {
+        html += '<div class="analysis-section green-flags">';
+        html += '<h4>✅ Strengths</h4>';
+        html += '<ul>';
+        greenFlags.forEach(flag => {
+            html += `<li><strong>${flag.title}:</strong> ${flag.description}</li>`;
+        });
+        html += '</ul></div>';
+    }
+
+    if (redFlags.length === 0 && greenFlags.length === 0) {
+        html += '<p class="analysis-neutral">Your lineup looks decent! No major issues detected.</p>';
+    }
+
+    resultsDiv.innerHTML = html;
+    resultsDiv.style.display = 'block';
 }
 
 // Fetch defense rankings from ESPN

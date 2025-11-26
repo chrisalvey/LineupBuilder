@@ -465,6 +465,115 @@ body {
     transform: none;
 }
 
+.action-btn.analyze {
+    background: #667eea;
+}
+
+.action-btn.analyze:hover:not(:disabled) {
+    background: #5568d3;
+}
+
+.analysis-results {
+    background: white;
+    border-radius: 5px;
+    padding: 15px;
+    margin-top: 15px;
+}
+
+.analysis-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 15px;
+    padding-bottom: 10px;
+    border-bottom: 2px solid #e0e0e0;
+}
+
+.analysis-header h3 {
+    margin: 0;
+    color: #333;
+}
+
+.lineup-score {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.score-label {
+    font-weight: 600;
+    color: #666;
+}
+
+.score-value {
+    font-size: 1.4em;
+    font-weight: bold;
+    padding: 4px 12px;
+    border-radius: 5px;
+}
+
+.score-good {
+    background: #28a745;
+    color: white;
+}
+
+.score-ok {
+    background: #ffc107;
+    color: #000;
+}
+
+.score-bad {
+    background: #dc3545;
+    color: white;
+}
+
+.analysis-section {
+    margin-bottom: 15px;
+}
+
+.analysis-section h4 {
+    margin: 0 0 10px 0;
+    font-size: 1.1em;
+}
+
+.analysis-section ul {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.analysis-section li {
+    padding: 8px 12px;
+    margin-bottom: 6px;
+    border-radius: 4px;
+    line-height: 1.5;
+}
+
+.red-flags h4 {
+    color: #dc3545;
+}
+
+.red-flags li {
+    background: #ffe6e6;
+    border-left: 4px solid #dc3545;
+}
+
+.green-flags h4 {
+    color: #28a745;
+}
+
+.green-flags li {
+    background: #e6ffe6;
+    border-left: 4px solid #28a745;
+}
+
+.analysis-neutral {
+    text-align: center;
+    padding: 20px;
+    color: #666;
+    font-style: italic;
+}
+
 .salary-info {
     background: white;
     padding: 15px;

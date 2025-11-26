@@ -55,6 +55,7 @@
                     <h2>Current Lineup</h2>
                     <div class="lineup-actions">
                         <button id="autoFillBtn" class="action-btn">Auto-Fill Lineup</button>
+                        <button id="analyzeBtn" class="action-btn analyze" disabled>Analyze Lineup</button>
                         <button id="clearLineupBtn" class="action-btn secondary">Clear Lineup</button>
                     </div>
                     <div class="salary-info">
@@ -74,11 +75,14 @@
                     <div class="lineup-slots" id="lineupSlots">
                         <!-- Lineup slots will be populated by JavaScript -->
                     </div>
+                    <div class="analysis-results" id="analysisResults" style="display: none;">
+                        <!-- Analysis results will be populated by JavaScript -->
+                    </div>
                 </div>
             </div>
         </div>
     </div>
 
-    <script src="script.js?v=4"></script>
+    <script src="script.js?v=5"></script>
 </body>
 </html>
