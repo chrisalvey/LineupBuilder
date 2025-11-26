@@ -470,8 +470,8 @@ function updateLineupDisplay(slotIndex) {
         slotContent.innerHTML = `
             <div class="slot-player">
                 <div>
-                    <strong>${player.name}</strong> ${captainBadge}<br>
-                    <small>${player.team} ${player.position} - $${player.salary.toLocaleString()}</small>
+                    <strong>${player.position} - ${player.name}</strong> ${captainBadge}<br>
+                    <small>${player.team} - $${player.salary.toLocaleString()}</small>
                 </div>
                 <button class="remove-btn" onclick="removePlayerFromLineup(${slotIndex})">Remove</button>
             </div>
