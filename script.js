@@ -572,8 +572,8 @@ function autoFillLineup() {
         currentSalary += player.salary;
     });
 
-    // Sort all players by MPPK (matchup-adjusted value) descending
-    const sortedPlayers = [...players].sort((a, b) => (b.mppk || b.ppk || 0) - (a.mppk || a.ppk || 0));
+    // Sort all players by Overall DFS Score descending
+    const sortedPlayers = [...players].sort((a, b) => (b.dfsScore || 0) - (a.dfsScore || 0));
 
     // Count empty slots to calculate remaining slots correctly
     const emptySlots = positions.filter((_, idx) => !currentLineup[idx]).length;
