@@ -216,6 +216,10 @@ function displayPlayers() {
         return;
     }
 
+    // Calculate remaining salary cap
+    const totalSalaryUsed = Object.values(currentLineup).reduce((sum, player) => sum + player.salary, 0);
+    const remainingSalary = salaryCap - totalSalaryUsed;
+
     playerList.innerHTML = filteredPlayers.map((player, index) => {
         const salary = parseInt(player.Salary);
         const avgPts = player.AvgPointsPerGame ? parseFloat(player.AvgPointsPerGame).toFixed(1) : '-';
@@ -241,6 +245,11 @@ function displayPlayers() {
             `<span title="${valueTooltip}">${mppkValue}</span>`;
         const starIcon = player.isTopValue ? '<span class="value-star" title="Top 10% value for position">⭐</span>' : '';
         const valueClass = player.isTopValue ? 'value-excellent' : '';
+
+        // Check if player salary exceeds remaining budget
+        const isOverBudget = salary > remainingSalary;
+        const overBudgetClass = isOverBudget ? 'over-budget' : '';
+        const overBudgetBadge = isOverBudget ? '<span class="over-budget-badge" title="Exceeds remaining salary cap">💰</span>' : '';
 
         // Overall DFS Score badge
         let dfsScoreBadge = '';
@@ -369,7 +378,7 @@ function displayPlayers() {
         }
 
         return `
-            <div class="player-item ${valueClass}" onclick="addPlayerToLineup(${index})">
+            <div class="player-item ${valueClass} ${overBudgetClass}" onclick="addPlayerToLineup(${index})">
                 ${dfsScoreBadge}
                 <div class="player-name">
                     ${player.Name} ${starIcon} ${trendIcon} ${injuryBadge} ${weatherAlert}
@@ -380,7 +389,7 @@ function displayPlayers() {
                 </div>
                 <div class="player-details">
                     <span class="player-value">${ppkDisplay} MPPK ${defenseMatchup}</span>
-                    <span class="player-salary">$${salary.toLocaleString()}</span>
+                    <span class="player-salary">${overBudgetBadge} $${salary.toLocaleString()}</span>
                 </div>
                 <div class="player-details">
                     <span class="player-game">${gameInfo}${oddsInfo}</span>

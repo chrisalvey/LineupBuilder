@@ -199,6 +199,21 @@ body {
     transform: translateX(2px);
 }
 
+.player-item.over-budget {
+    opacity: 0.6;
+}
+
+.player-item.over-budget:hover {
+    opacity: 0.8;
+}
+
+.over-budget-badge {
+    display: inline-block;
+    margin-right: 4px;
+    font-size: 1em;
+    cursor: help;
+}
+
 .player-name {
     font-weight: bold;
     font-size: 1.05em;
