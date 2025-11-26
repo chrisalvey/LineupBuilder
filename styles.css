@@ -482,6 +482,9 @@ body {
     border-radius: 5px;
     margin-bottom: 8px;
     min-height: 45px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
 }
 
 .lineup-slot.filled {
@@ -492,11 +495,16 @@ body {
 .slot-label {
     font-weight: bold;
     color: #666;
-    margin-bottom: 5px;
+    flex-shrink: 0;
 }
 
 .lineup-slot.filled .slot-label {
     display: none;
+}
+
+.slot-content {
+    flex-grow: 1;
+    width: 100%;
 }
 
 .slot-player {
