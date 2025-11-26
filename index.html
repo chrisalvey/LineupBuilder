@@ -33,6 +33,18 @@
                         <!-- Position tabs will be populated by JavaScript based on contest type -->
                     </div>
 
+                    <div class="search-section">
+                        <input type="text"
+                               id="playerSearch"
+                               placeholder="Search players by name or team..."
+                               class="search-input">
+                        <span class="search-clear" id="searchClear" style="display: none;">✕</span>
+                    </div>
+
+                    <div class="game-filters" id="gameFilters" style="display: none;">
+                        <!-- Game filter chips will be populated by JavaScript -->
+                    </div>
+
                     <div class="sort-controls">
                         <label for="sortBy">Sort by:</label>
                         <select id="sortBy">
@@ -83,6 +95,6 @@
         </div>
     </div>
 
-    <script src="script.js?v=5"></script>
+    <script src="script.js?v=6"></script>
 </body>
 </html>

@@ -14,6 +14,28 @@ let defenseRankings = {};
 let weatherData = {};
 let recentPerformance = {};
 
+// Search and filter state
+let searchQuery = '';
+let selectedGames = new Set();
+let availableGames = [];
+let markedOutPlayers = new Set();
+
+// LocalStorage functions for marked out players
+function loadMarkedOutPlayers() {
+    const saved = localStorage.getItem('markedOutPlayers');
+    if (saved) {
+        try {
+            markedOutPlayers = new Set(JSON.parse(saved));
+        } catch (e) {
+            markedOutPlayers = new Set();
+        }
+    }
+}
+
+function saveMarkedOutPlayers() {
+    localStorage.setItem('markedOutPlayers', JSON.stringify([...markedOutPlayers]));
+}
+
 // Contest configurations based on official DraftKings rules
 const contestConfigs = {
     classic: {
@@ -32,6 +54,7 @@ const contestConfigs = {
 
 // Initialize
 document.addEventListener('DOMContentLoaded', function() {
+    loadMarkedOutPlayers();
     initializeEventListeners();
     updatePositionTabs();
     initializeLineupSlots();
@@ -56,6 +79,28 @@ function initializeEventListeners() {
     // Sort selector
     document.getElementById('sortBy').addEventListener('change', function(e) {
         currentSort = e.target.value;
+        displayPlayers();
+    });
+
+    // Player search
+    document.getElementById('playerSearch').addEventListener('input', function(e) {
+        searchQuery = e.target.value.trim().toLowerCase();
+
+        // Show/hide clear button
+        const clearBtn = document.getElementById('searchClear');
+        if (searchQuery) {
+            clearBtn.style.display = 'inline-block';
+        } else {
+            clearBtn.style.display = 'none';
+        }
+
+        displayPlayers();
+    });
+
+    document.getElementById('searchClear').addEventListener('click', function() {
+        document.getElementById('playerSearch').value = '';
+        searchQuery = '';
+        this.style.display = 'none';
         displayPlayers();
     });
 
@@ -113,6 +158,7 @@ function parseCSV(csv) {
 
     calculatePlayerValues();
     calculateRecentPerformance();
+    extractUniqueGames();
     displayPlayers();
 
     // Fetch all enhanced data in background
@@ -162,13 +208,49 @@ function calculatePlayerValues() {
 function getFilteredAndSortedPlayers() {
     const config = contestConfigs[contestType];
 
-    const filteredPlayers = players.filter(p => {
-        if (currentPosition === 'ALL') return true;
-        if (currentPosition === 'FLEX') {
-            return config.flexEligible.includes(p.Position);
+    let filteredPlayers = players.filter(p => {
+        // SEARCH FILTER - applies first, overrides position tabs when active
+        if (searchQuery) {
+            const nameMatch = p.Name.toLowerCase().includes(searchQuery);
+            const teamMatch = (p.TeamAbbrev || '').toLowerCase().includes(searchQuery);
+            if (!nameMatch && !teamMatch) return false;
+
+            // If searching, skip position filter (search all positions)
+            // But still apply game filter
+            if (selectedGames.size > 0) {
+                const gameInfo = p['Game Info'];
+                if (!gameInfo) return false;
+                const game = gameInfo.split(' ')[0];
+                return selectedGames.has(game);
+            }
+            return true; // Search match, no game filter
         }
-        return p.Position === currentPosition;
+
+        // POSITION FILTER - only applies when NOT searching
+        let positionMatch;
+        if (currentPosition === 'ALL') {
+            positionMatch = true;
+        } else if (currentPosition === 'FLEX') {
+            positionMatch = config.flexEligible.includes(p.Position);
+        } else {
+            positionMatch = p.Position === currentPosition;
+        }
+
+        // GAME FILTER - applies with or without position filter
+        if (selectedGames.size > 0) {
+            const gameInfo = p['Game Info'];
+            if (!gameInfo) return false;
+            const game = gameInfo.split(' ')[0];
+            return positionMatch && selectedGames.has(game);
+        }
+
+        return positionMatch;
     });
+
+    // Separate marked-out players and move them to bottom
+    const activePlayers = filteredPlayers.filter(p => !markedOutPlayers.has(p.ID));
+    const outPlayers = filteredPlayers.filter(p => markedOutPlayers.has(p.ID));
+    filteredPlayers = [...activePlayers, ...outPlayers];
 
     // Sort based on current sort selection
     switch(currentSort) {
@@ -295,25 +377,14 @@ function displayPlayers() {
         const normalizedPlayerName = normalizePlayerName(player.Name);
         if (injuryData[normalizedPlayerName]) {
             const injury = injuryData[normalizedPlayerName];
-            const description = injury.description?.toLowerCase() || '';
 
-            // Check if description is informational rather than injury-related
-            const isInformational = description.includes('full') ||
-                                   description.includes('practiced fully') ||
-                                   description.includes('no injury') ||
-                                   description.includes('expected to play') ||
-                                   description.includes('cleared') ||
-                                   description.includes('activated') ||
-                                   description.includes('returned to practice');
-
-            // For Q status with informational content, use info icon instead
-            if (injury.status === 'Q' && isInformational) {
-                injuryBadge = `<span class="info-badge" title="${injury.description}">ℹ️</span>`;
-            } else {
-                // Use regular injury badges for OUT, D, or actual injury concerns
-                const injuryClass = injury.status === 'OUT' || injury.status === 'IR' ? 'injury-out' :
-                                   injury.status === 'D' ? 'injury-doubtful' : 'injury-questionable';
-                injuryBadge = `<span class="injury-badge ${injuryClass}" title="${injury.description}">${injury.status}</span>`;
+            // All Q status shows as info icon, D and OUT show as badges
+            if (injury.status === 'Q') {
+                injuryBadge = `<span class="info-badge" title="${injury.description || 'Questionable'}">ℹ️</span>`;
+            } else if (injury.status === 'D') {
+                injuryBadge = `<span class="injury-badge injury-doubtful" title="${injury.description || 'Doubtful'}">D</span>`;
+            } else if (injury.status === 'OUT' || injury.status === 'IR') {
+                injuryBadge = `<span class="injury-badge injury-out" title="${injury.description || 'Out'}">OUT</span>`;
             }
         }
 
@@ -378,9 +449,22 @@ function displayPlayers() {
             oddsInfo = spreadText || totalText ? `<br><small class="odds-info">${spreadText} ${totalText} ${projText}</small>` : '';
         }
 
+        // Check if player is marked out
+        const isMarkedOut = markedOutPlayers.has(player.ID);
+        const markedOutClass = isMarkedOut ? 'marked-out' : '';
+        const markedOutButton = `
+            <button class="mark-out-btn ${isMarkedOut ? 'active' : ''}"
+                    onclick="togglePlayerOut('${player.ID}', event)"
+                    title="${isMarkedOut ? 'Unmark as Out' : 'Mark as Out'}">
+                ${isMarkedOut ? '✓ OUT' : 'Mark Out'}
+            </button>
+        `;
+
         return `
-            <div class="player-item ${valueClass} ${overBudgetClass}" onclick="addPlayerToLineup(${index})">
+            <div class="player-item ${valueClass} ${overBudgetClass} ${markedOutClass}"
+                 ${isMarkedOut ? '' : `onclick="addPlayerToLineup(${index})"`}>
                 ${dfsScoreBadge}
+                ${markedOutButton}
                 <div class="player-name">
                     ${player.Name} ${starIcon} ${trendIcon} ${injuryBadge} ${weatherAlert}
                 </div>
@@ -398,6 +482,84 @@ function displayPlayers() {
             </div>
         `;
     }).join('');
+}
+
+// Extract unique games from player data
+function extractUniqueGames() {
+    const gameSet = new Set();
+
+    players.forEach(player => {
+        const gameInfo = player['Game Info'];
+        if (gameInfo) {
+            // Extract just the matchup (e.g., "JAX@TEN")
+            const game = gameInfo.split(' ')[0];
+            if (game) gameSet.add(game);
+        }
+    });
+
+    availableGames = Array.from(gameSet).sort();
+    renderGameFilters();
+}
+
+// Render game filter chips
+function renderGameFilters() {
+    const container = document.getElementById('gameFilters');
+
+    if (availableGames.length === 0) {
+        container.style.display = 'none';
+        return;
+    }
+
+    container.style.display = 'block';
+    container.innerHTML = `
+        <div class="game-chips">
+            ${availableGames.map(game => `
+                <button class="game-chip ${selectedGames.has(game) ? 'active' : ''}"
+                        onclick="toggleGameFilter('${game}')">
+                    ${game}
+                </button>
+            `).join('')}
+            ${selectedGames.size > 0 ? '<button class="game-chip clear-all" onclick="clearGameFilters()">Clear All</button>' : ''}
+        </div>
+    `;
+}
+
+// Toggle game filter
+function toggleGameFilter(game) {
+    if (selectedGames.has(game)) {
+        selectedGames.delete(game);
+    } else {
+        selectedGames.add(game);
+    }
+    renderGameFilters();
+    displayPlayers();
+}
+
+// Clear all game filters
+function clearGameFilters() {
+    selectedGames.clear();
+    renderGameFilters();
+    displayPlayers();
+}
+
+// Toggle player out status
+function togglePlayerOut(playerId, event) {
+    event.stopPropagation(); // Prevent clicking player card
+
+    if (markedOutPlayers.has(playerId)) {
+        markedOutPlayers.delete(playerId);
+    } else {
+        markedOutPlayers.add(playerId);
+        // Remove from lineup if currently in it
+        Object.keys(currentLineup).forEach(slotIndex => {
+            if (currentLineup[slotIndex]?.id === playerId) {
+                removePlayerFromLineup(slotIndex);
+            }
+        });
+    }
+
+    saveMarkedOutPlayers();
+    displayPlayers();
 }
 
 function initializeLineupSlots() {
@@ -1232,29 +1394,9 @@ function calculateAdvancedMetrics() {
             else if (trend === 'cold') dfsScore -= 5;
         }
 
-        // COMPONENT 6: Injury Status - 5% weight (penalty only, -5 to -100)
-        const normalizedPlayerName = normalizePlayerName(player.Name);
-        if (injuryData[normalizedPlayerName]) {
-            const injury = injuryData[normalizedPlayerName];
-            const status = injury.status;
-            const description = injury.description?.toLowerCase() || '';
-
-            const isInformational = description.includes('full') ||
-                                   description.includes('practiced fully') ||
-                                   description.includes('no injury') ||
-                                   description.includes('expected to play') ||
-                                   description.includes('cleared') ||
-                                   description.includes('activated') ||
-                                   description.includes('returned to practice');
-
-            if (status === 'OUT' || status === 'IR') {
-                dfsScore = 0; // Unplayable
-            } else if (status === 'D') {
-                dfsScore -= 15; // Doubtful
-            } else if (status === 'Q' && !isInformational) {
-                dfsScore -= 5; // Questionable
-            }
-        }
+        // COMPONENT 6: Injury Status - REMOVED
+        // Injuries are now managed manually via "Mark Out" button
+        // DFS score is no longer penalized for injury status
 
         // Clamp score to 0-100
         dfsScore = Math.max(0, Math.min(100, dfsScore));

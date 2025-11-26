@@ -133,6 +133,89 @@ body {
     border-color: #667eea;
 }
 
+.search-section {
+    position: relative;
+    margin-bottom: 15px;
+}
+
+.search-input {
+    width: 100%;
+    padding: 10px 35px 10px 12px;
+    border: 2px solid #ddd;
+    border-radius: 5px;
+    font-size: 1em;
+    transition: border-color 0.3s;
+}
+
+.search-input:focus {
+    outline: none;
+    border-color: #667eea;
+}
+
+.search-clear {
+    position: absolute;
+    right: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    cursor: pointer;
+    color: #999;
+    font-size: 1.2em;
+    padding: 5px;
+    transition: color 0.3s;
+}
+
+.search-clear:hover {
+    color: #333;
+}
+
+.game-filters {
+    margin-bottom: 15px;
+}
+
+.game-filter-label {
+    font-weight: 600;
+    color: #333;
+    margin-bottom: 8px;
+}
+
+.game-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.game-chip {
+    padding: 6px 12px;
+    border: 2px solid #667eea;
+    background: white;
+    color: #667eea;
+    border-radius: 20px;
+    cursor: pointer;
+    font-size: 0.85em;
+    font-weight: 600;
+    transition: all 0.3s;
+}
+
+.game-chip:hover {
+    background: #f0f4ff;
+    transform: scale(1.05);
+}
+
+.game-chip.active {
+    background: #667eea;
+    color: white;
+}
+
+.game-chip.clear-all {
+    border-color: #dc3545;
+    color: #dc3545;
+}
+
+.game-chip.clear-all:hover {
+    background: #dc3545;
+    color: white;
+}
+
 .sort-controls {
     display: flex;
     align-items: center;
@@ -212,6 +295,43 @@ body {
     margin-right: 4px;
     font-size: 1em;
     cursor: help;
+}
+
+/* Mark Out button and marked-out players */
+.mark-out-btn {
+    position: absolute;
+    bottom: 8px;
+    right: 8px;
+    padding: 4px 8px;
+    font-size: 0.75em;
+    font-weight: 600;
+    border: 1px solid #dc3545;
+    background: white;
+    color: #dc3545;
+    border-radius: 3px;
+    cursor: pointer;
+    transition: all 0.3s;
+    z-index: 10;
+}
+
+.mark-out-btn:hover {
+    background: #dc3545;
+    color: white;
+}
+
+.mark-out-btn.active {
+    background: #dc3545;
+    color: white;
+}
+
+.player-item.marked-out {
+    opacity: 0.5;
+    background: #f8f8f8;
+    pointer-events: none;
+}
+
+.player-item.marked-out .mark-out-btn {
+    pointer-events: auto; /* Allow clicking button even when card is disabled */
 }
 
 .player-name {
