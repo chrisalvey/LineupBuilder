@@ -1066,7 +1066,10 @@ function calculateAdvancedMetrics() {
         player.defenseMultiplier = defenseMultiplier;
     });
 
-    console.log('Advanced metrics calculated');
+    // Log sample DFS scores for debugging
+    const samplePlayers = players.slice(0, 3);
+    console.log('Advanced metrics calculated. Sample DFS Scores:',
+        samplePlayers.map(p => `${p.Name}: ${Math.round(p.dfsScore || 0)}`).join(', '));
 }
 
 // Fetch odds from The Odds API
