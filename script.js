@@ -20,6 +20,10 @@ let selectedGames = new Set();
 let availableGames = [];
 let markedOutPlayers = new Set();
 
+// Contest management
+let availableContests = [];
+let selectedContest = null;
+
 // LocalStorage functions for marked out players
 function loadMarkedOutPlayers() {
     const saved = localStorage.getItem('markedOutPlayers');
@@ -34,6 +38,192 @@ function loadMarkedOutPlayers() {
 
 function saveMarkedOutPlayers() {
     localStorage.setItem('markedOutPlayers', JSON.stringify([...markedOutPlayers]));
+}
+
+// Load available contests from contests.json
+async function loadAvailableContests() {
+    try {
+        const response = await fetch('contests.json');
+        if (!response.ok) {
+            console.warn('⚠️ Could not load contests.json - using manual upload only');
+            populateContestDropdown([]);
+            return;
+        }
+
+        const data = await response.json();
+        const contests = data.contests || [];
+
+        // Validate and filter contests
+        const validatedContests = [];
+        const today = new Date();
+        today.setHours(0, 0, 0, 0); // Reset time to start of day
+
+        contests.forEach(contest => {
+            const validation = validateContestFilename(contest.file);
+
+            if (!validation.valid) {
+                console.warn(`⚠️ Misnamed file: ${contest.file} - ${validation.error}`);
+                return; // Skip invalid contests
+            }
+
+            // Parse date and filter out past contests
+            const contestDate = new Date(contest.date);
+            contestDate.setHours(0, 0, 0, 0);
+
+            if (contestDate >= today) {
+                validatedContests.push(contest);
+            }
+        });
+
+        availableContests = validatedContests;
+        populateContestDropdown(validatedContests);
+    } catch (error) {
+        console.error('Error loading contests:', error);
+        populateContestDropdown([]);
+    }
+}
+
+// Validate contest filename format: YYYY-MM-DD-ContestType-Description.csv
+function validateContestFilename(filename) {
+    if (!filename || !filename.endsWith('.csv')) {
+        return { valid: false, error: 'File must have .csv extension' };
+    }
+
+    const nameWithoutExt = filename.replace('.csv', '');
+    const parts = nameWithoutExt.split('-');
+
+    if (parts.length < 3) {
+        return { valid: false, error: 'Format should be: YYYY-MM-DD-ContestType-Description.csv' };
+    }
+
+    // Validate date (first 3 parts: YYYY-MM-DD)
+    const year = parts[0];
+    const month = parts[1];
+    const day = parts[2];
+
+    if (!/^\d{4}$/.test(year)) {
+        return { valid: false, error: `Invalid year: ${year} (should be 4 digits)` };
+    }
+    if (!/^\d{2}$/.test(month) || parseInt(month) < 1 || parseInt(month) > 12) {
+        return { valid: false, error: `Invalid month: ${month} (should be 01-12)` };
+    }
+    if (!/^\d{2}$/.test(day) || parseInt(day) < 1 || parseInt(day) > 31) {
+        return { valid: false, error: `Invalid day: ${day} (should be 01-31)` };
+    }
+
+    // Validate contest type (4th part)
+    const contestType = parts[3];
+    if (!contestType || !['classic', 'showdown'].includes(contestType.toLowerCase())) {
+        return { valid: false, error: `Invalid contest type: ${contestType} (should be "Classic" or "Showdown")` };
+    }
+
+    // Description is optional (5th+ parts)
+    if (parts.length < 4) {
+        return { valid: false, error: 'Missing description in filename' };
+    }
+
+    return { valid: true };
+}
+
+// Populate contest dropdown with available contests
+function populateContestDropdown(contests) {
+    const select = document.getElementById('contestSelect');
+    select.innerHTML = '';
+
+    if (contests.length === 0) {
+        // No contests available, go straight to manual upload
+        const option = document.createElement('option');
+        option.value = 'upload';
+        option.textContent = 'Upload Custom CSV';
+        select.appendChild(option);
+        handleContestSelection('upload');
+        return;
+    }
+
+    // Add placeholder option
+    const placeholderOption = document.createElement('option');
+    placeholderOption.value = '';
+    placeholderOption.textContent = 'Select a contest...';
+    placeholderOption.disabled = true;
+    placeholderOption.selected = true;
+    select.appendChild(placeholderOption);
+
+    // Add contest options
+    contests.forEach(contest => {
+        const option = document.createElement('option');
+        option.value = contest.file;
+        option.textContent = contest.display;
+        option.dataset.type = contest.type;
+        select.appendChild(option);
+    });
+
+    // Add separator
+    const separator = document.createElement('option');
+    separator.disabled = true;
+    separator.textContent = '──────────────';
+    select.appendChild(separator);
+
+    // Add manual upload option at the bottom
+    const uploadOption = document.createElement('option');
+    uploadOption.value = 'upload';
+    uploadOption.textContent = 'Upload Custom CSV';
+    select.appendChild(uploadOption);
+}
+
+// Handle contest selection
+async function handleContestSelection(value) {
+    if (value === 'upload') {
+        // Show upload section and contest type selector
+        document.getElementById('uploadSection').style.display = 'block';
+        document.getElementById('contestTypeSelector').style.display = 'flex';
+        selectedContest = null;
+
+        // Clear current players if any
+        players = [];
+        displayPlayers();
+        document.getElementById('fileName').textContent = '';
+        return;
+    }
+
+    if (!value) {
+        // No selection
+        document.getElementById('uploadSection').style.display = 'none';
+        document.getElementById('contestTypeSelector').style.display = 'none';
+        return;
+    }
+
+    // Load selected contest
+    selectedContest = availableContests.find(c => c.file === value);
+    if (!selectedContest) {
+        console.error('Contest not found:', value);
+        return;
+    }
+
+    // Hide upload section and contest type selector
+    document.getElementById('uploadSection').style.display = 'none';
+    document.getElementById('contestTypeSelector').style.display = 'none';
+
+    // Set contest type from selection
+    contestType = selectedContest.type;
+    salaryCap = contestConfigs[contestType].salaryCap;
+
+    // Update UI
+    updatePositionTabs();
+    initializeLineupSlots();
+
+    // Load CSV from contests folder
+    try {
+        const response = await fetch(`contests/${selectedContest.file}`);
+        if (!response.ok) {
+            throw new Error(`Failed to load contest file: ${selectedContest.file}`);
+        }
+
+        const csvText = await response.text();
+        parseCSV(csvText);
+    } catch (error) {
+        console.error('Error loading contest file:', error);
+        alert(`Failed to load contest: ${selectedContest.display}\n\nMake sure the file exists in the /contests/ folder.`);
+    }
 }
 
 // Contest configurations based on official DraftKings rules
@@ -55,6 +245,7 @@ const contestConfigs = {
 // Initialize
 document.addEventListener('DOMContentLoaded', function() {
     loadMarkedOutPlayers();
+    loadAvailableContests();
     initializeEventListeners();
     updatePositionTabs();
     initializeLineupSlots();
@@ -64,7 +255,12 @@ function initializeEventListeners() {
     // File upload
     document.getElementById('playerUpload').addEventListener('change', handleFileUpload);
 
-    // Contest type selector
+    // Contest selector
+    document.getElementById('contestSelect').addEventListener('change', function(e) {
+        handleContestSelection(e.target.value);
+    });
+
+    // Contest type selector (only for custom uploads)
     document.getElementById('contestType').addEventListener('change', function(e) {
         contestType = e.target.value;
         salaryCap = contestConfigs[contestType].salaryCap;

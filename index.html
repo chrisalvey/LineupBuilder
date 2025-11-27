@@ -12,6 +12,12 @@
         <div class="header">
             <h1>DraftKings Lineup Builder</h1>
             <div class="contest-selector">
+                <label for="contestSelect">Select Contest:</label>
+                <select id="contestSelect">
+                    <option value="">Loading contests...</option>
+                </select>
+            </div>
+            <div class="contest-type-selector" id="contestTypeSelector" style="display: none;">
                 <label for="contestType">Contest Type:</label>
                 <select id="contestType">
                     <option value="classic">Classic</option>
@@ -21,7 +27,7 @@
         </div>
 
         <div class="main-content">
-            <div class="upload-section">
+            <div class="upload-section" id="uploadSection" style="display: none;">
                 <label for="playerUpload" class="upload-btn">Upload Player CSV</label>
                 <input type="file" id="playerUpload" accept=".csv" style="display: none;">
                 <span id="fileName"></span>
@@ -95,6 +101,6 @@
         </div>
     </div>
 
-    <script src="script.js?v=6"></script>
+    <script src="script.js?v=7"></script>
 </body>
 </html>
