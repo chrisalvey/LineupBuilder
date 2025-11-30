@@ -1043,7 +1043,7 @@ function autoFillLineup() {
     }
 }
 
-// Analyze lineup for DFS best practices
+// Analyze lineup for DFS best practices - ENHANCED VERSION
 function analyzeLineup() {
     const lineupArray = Object.values(currentLineup);
     const redFlags = [];
@@ -1059,18 +1059,93 @@ function analyzeLineup() {
     const totalSalary = lineupArray.reduce((sum, player) => sum + player.salary, 0);
     const remainingSalary = salaryCap - totalSalary;
 
-    // RED FLAG 1: Poor Salary Cap Usage
+    // ============================================================================
+    // SALARY CONSTRUCTION CHECKS
+    // ============================================================================
+
+    // RED FLAG: Poor Salary Cap Usage
     if (remainingSalary > 1000) {
         redFlags.push({
+            category: 'Construction',
+            weight: -1,
             title: 'Poor Salary Usage',
             description: `You have $${remainingSalary.toLocaleString()} remaining. Try to get closer to the $50k cap for maximum value.`
         });
     }
 
-    // Find QB in lineup
-    const qb = lineupPlayers.find(p => p.position === 'QB');
+    // GREEN FLAG: Optimal Salary Usage
+    if (remainingSalary < 500) {
+        greenFlags.push({
+            category: 'Construction',
+            weight: 1,
+            title: 'Excellent Salary Usage',
+            description: `Only $${remainingSalary} left unused. You're maximizing your salary cap value!`
+        });
+    }
 
-    // RED FLAG 2 & GREEN FLAG 1: QB Stacking
+    // NEW: RED FLAG - Punt Play Overload
+    const puntPlays = lineupPlayers.filter(p => p.position !== 'DST' && p.salary < 4000);
+    if (puntPlays.length >= 3) {
+        redFlags.push({
+            category: 'Construction',
+            weight: -1,
+            title: 'Punt Play Overload',
+            description: `You have ${puntPlays.length} cheap players (<$4000): ${puntPlays.map(p => p.name).join(', ')}. Too many punt plays limits ceiling.`
+        });
+    }
+
+    // NEW: RED FLAG - Single RB Strategy
+    const rbs = lineupPlayers.filter(p => p.position === 'RB');
+    if (rbs.length === 1) {
+        redFlags.push({
+            category: 'Construction',
+            weight: -0.5,
+            title: 'Single RB Strategy',
+            description: `Only 1 RB in lineup (${rbs[0].name}). RBs have highest floor and TD equity - single-RB builds are risky.`
+        });
+    }
+
+    // NEW: RED FLAG - Missing Elite Player
+    const elitePlayers = lineupPlayers.filter(p => p.salary >= 8500);
+    if (elitePlayers.length === 0) {
+        redFlags.push({
+            category: 'Construction',
+            weight: -0.5,
+            title: 'No Elite Player',
+            description: `No players priced ≥$8500. Consider anchoring lineup with at least one premium stud.`
+        });
+    }
+
+    // NEW: GREEN FLAG - Balanced Stars & Scrubs
+    const studs = lineupPlayers.filter(p => p.salary >= 8000);
+    const value = lineupPlayers.filter(p => p.position !== 'DST' && p.salary <= 4500);
+    if (studs.length >= 2 && value.length >= 2) {
+        greenFlags.push({
+            category: 'Construction',
+            weight: 1,
+            title: 'Balanced Stars & Scrubs',
+            description: `Optimal salary distribution: ${studs.length} studs (≥$8000) and ${value.length} value plays (≤$4500).`
+        });
+    }
+
+    // ============================================================================
+    // CORRELATION & STACKING CHECKS
+    // ============================================================================
+
+    const qb = lineupPlayers.find(p => p.position === 'QB');
+    const dst = lineupPlayers.find(p => p.position === 'DST');
+
+    // NEW: CRITICAL RED FLAG - QB + DST from Same Team
+    if (qb && dst && qb.team === dst.team) {
+        redFlags.push({
+            category: 'Correlation',
+            weight: -2,
+            title: 'QB + DST Same Team (CRITICAL ERROR)',
+            description: `Your QB (${qb.name}) and DST (${dst.name}) are from ${qb.team}. This is negative correlation - if QB scores, DST likely fails. Fix immediately!`
+        });
+    }
+
+    // QB Stacking Analysis
     if (qb) {
         const qbTeammates = lineupPlayers.filter(p =>
             p.team === qb.team && p.position !== 'QB' && ['WR', 'TE', 'RB'].includes(p.position)
@@ -1078,16 +1153,20 @@ function analyzeLineup() {
 
         if (qbTeammates.length === 0) {
             redFlags.push({
+                category: 'Correlation',
+                weight: -1,
                 title: 'No QB Stack',
                 description: `Your QB (${qb.name}) has no pass-catchers from ${qb.team}. QB-WR correlation is crucial in DFS.`
             });
         } else if (qbTeammates.length >= 2) {
             greenFlags.push({
+                category: 'Correlation',
+                weight: 1,
                 title: 'Strong QB Stack',
                 description: `QB ${qb.name} stacked with ${qbTeammates.length} teammates (${qbTeammates.map(p => p.name).join(', ')}). This is optimal!`
             });
 
-            // Check for bring-back (opponent player in same game)
+            // Check for bring-back
             const qbGame = qb['Game Info'] ? qb['Game Info'].split(' ')[0] : '';
             if (qbGame) {
                 const opponentTeam = qbGame.includes('@')
@@ -1098,26 +1177,31 @@ function analyzeLineup() {
 
                 if (bringBack) {
                     greenFlags.push({
+                        category: 'Correlation',
+                        weight: 1,
                         title: 'Game Stack with Bring-Back',
                         description: `You have ${bringBack.name} from ${opponentTeam} to correlate with your ${qb.team} stack. Perfect for shootouts!`
                     });
                 } else {
                     redFlags.push({
+                        category: 'Correlation',
+                        weight: -0.5,
                         title: 'Missing Bring-Back',
                         description: `You have a QB + 2 teammate stack but no player from the opposing team. Add a bring-back for optimal game stack.`
                     });
                 }
             }
         } else {
-            // 1 teammate - decent but could be better
             greenFlags.push({
+                category: 'Correlation',
+                weight: 0.5,
                 title: 'QB Stack Present',
                 description: `QB ${qb.name} stacked with ${qbTeammates[0].name}. Consider adding another ${qb.team} pass-catcher for stronger correlation.`
             });
         }
     }
 
-    // RED FLAG 3: Same-Position Teammates Without QB
+    // Same-Position Teammates Without QB
     const teamCounts = {};
     lineupPlayers.forEach(p => {
         if (!teamCounts[p.team]) {
@@ -1134,6 +1218,8 @@ function analyzeLineup() {
         ['WR', 'RB'].forEach(pos => {
             if (teamData[pos].length >= 2 && !teamData.hasQB) {
                 redFlags.push({
+                    category: 'Correlation',
+                    weight: -1,
                     title: 'Negative Correlation',
                     description: `You have ${teamData[pos].length} ${pos}s from ${team} (${teamData[pos].join(', ')}) without their QB. They'll cannibalize each other's points.`
                 });
@@ -1141,39 +1227,232 @@ function analyzeLineup() {
         });
     });
 
-    // RED FLAG 5: Expensive Defense
-    const dst = lineupPlayers.find(p => p.position === 'DST');
-    if (dst && dst.salary > 3500) {
-        redFlags.push({
-            title: 'Expensive Defense',
-            description: `Your defense costs $${dst.salary.toLocaleString()}. Defenses are volatile - consider downgrading to add value elsewhere.`
-        });
-    }
-
-    // GREEN FLAG 2: Optimal Salary Usage
-    if (remainingSalary < 500) {
-        greenFlags.push({
-            title: 'Excellent Salary Usage',
-            description: `Only $${remainingSalary} left unused. You're maximizing your salary cap value!`
-        });
-    }
-
-    // GREEN FLAG 4: Game Diversity
-    const games = new Set();
-    lineupPlayers.forEach(p => {
-        const game = p['Game Info'] ? p['Game Info'].split(' ')[0] : '';
-        if (game) games.add(game);
+    // NEW: RED FLAG - Incomplete Passing Game Stack
+    Object.keys(teamCounts).forEach(team => {
+        const teamData = teamCounts[team];
+        const passCatchers = teamData.WR.length + teamData.TE.length;
+        if (passCatchers >= 2 && !teamData.hasQB) {
+            redFlags.push({
+                category: 'Correlation',
+                weight: -0.5,
+                title: 'Incomplete Passing Stack',
+                description: `You have ${passCatchers} pass-catchers from ${team} without their QB. You're missing the correlation benefit.`
+            });
+        }
     });
 
+    // ============================================================================
+    // GAME ENVIRONMENT & VEGAS CHECKS
+    // ============================================================================
+
+    const games = new Set();
+    const gameData = {};
+    lineupPlayers.forEach(p => {
+        const game = p['Game Info'] ? p['Game Info'].split(' ')[0] : '';
+        if (game) {
+            games.add(game);
+            if (!gameData[game]) {
+                gameData[game] = {
+                    players: [],
+                    total: gameOdds[game]?.total || null
+                };
+            }
+            gameData[game].players.push(p);
+        }
+    });
+
+    // Game Diversity
     if (games.size >= 3) {
         greenFlags.push({
+            category: 'Game Environment',
+            weight: 0.5,
             title: 'Good Game Diversity',
             description: `Your lineup spans ${games.size} different games. Good diversification!`
         });
     } else if (games.size <= 2) {
         redFlags.push({
+            category: 'Game Environment',
+            weight: -0.5,
             title: 'Limited Game Exposure',
             description: `Your lineup only covers ${games.size} game(s). Consider diversifying across more games.`
+        });
+    }
+
+    // NEW: RED FLAG - Too Many Players from One Game
+    Object.keys(gameData).forEach(game => {
+        if (gameData[game].players.length >= 4) {
+            redFlags.push({
+                category: 'Game Environment',
+                weight: -1,
+                title: 'Over-Concentrated in One Game',
+                description: `You have ${gameData[game].players.length} players from ${game}. If this game disappoints, your lineup is dead.`
+            });
+        }
+    });
+
+    // NEW: RED FLAG - Low Game Total Exposure
+    const lowTotalPlayers = lineupPlayers.filter(p => {
+        const game = p['Game Info'] ? p['Game Info'].split(' ')[0] : '';
+        return game && gameOdds[game]?.total && gameOdds[game].total < 42;
+    });
+    if (lowTotalPlayers.length > 0) {
+        redFlags.push({
+            category: 'Game Environment',
+            weight: -1,
+            title: 'Low Game Total Exposure',
+            description: `${lowTotalPlayers.length} player(s) in games with total <42: ${lowTotalPlayers.map(p => p.name).join(', ')}. Low totals = fewer scoring opportunities.`
+        });
+    }
+
+    // NEW: GREEN FLAG - Optimal Game Total Concentration
+    const highTotalPlayers = lineupPlayers.filter(p => {
+        const game = p['Game Info'] ? p['Game Info'].split(' ')[0] : '';
+        return game && gameOdds[game]?.total && gameOdds[game].total >= 48;
+    });
+    if (highTotalPlayers.length >= 4) {
+        greenFlags.push({
+            category: 'Game Environment',
+            weight: 1,
+            title: 'High-Total Game Concentration',
+            description: `${highTotalPlayers.length} players in high-scoring games (total ≥48). Excellent ceiling potential!`
+        });
+    }
+
+    // NEW: RED FLAG - No Shootout Game Exposure
+    const allGameTotals = Object.keys(gameOdds).map(g => gameOdds[g].total).filter(t => t);
+    const hasShootout = allGameTotals.some(t => t >= 50);
+    if (hasShootout) {
+        const shootoutPlayers = lineupPlayers.filter(p => {
+            const game = p['Game Info'] ? p['Game Info'].split(' ')[0] : '';
+            return game && gameOdds[game]?.total && gameOdds[game].total >= 50;
+        });
+        if (shootoutPlayers.length === 0) {
+            redFlags.push({
+                category: 'Game Environment',
+                weight: -0.5,
+                title: 'Missing Shootout Exposure',
+                description: `There are games with total ≥50 on this slate, but you have no exposure. Shootouts provide best ceiling outcomes.`
+            });
+        }
+    }
+
+    // NEW: GREEN FLAG - Game Script Alignment (Passing Game)
+    if (qb && qb.playerSpread > 6) {
+        greenFlags.push({
+            category: 'Game Environment',
+            weight: 0.5,
+            title: 'QB in Negative Game Script',
+            description: `QB ${qb.name} is a ${qb.playerSpread.toFixed(1)} point underdog. Underdogs throw more = increased volume.`
+        });
+    }
+
+    // NEW: GREEN FLAG - Game Script Alignment (RBs in Positive Script)
+    const favoriteRBs = rbs.filter(rb => rb.playerSpread && rb.playerSpread < -3);
+    if (favoriteRBs.length >= 2) {
+        greenFlags.push({
+            category: 'Game Environment',
+            weight: 0.5,
+            title: 'RBs in Positive Game Script',
+            description: `${favoriteRBs.length} RBs are on favored teams. Favorites run more late in games = volume + TDs.`
+        });
+    }
+
+    // NEW: RED FLAG - Too Many Low Team Totals
+    const lowTeamTotalPlayers = lineupPlayers.filter(p => p.impliedTeamTotal && p.impliedTeamTotal < 20);
+    if (lowTeamTotalPlayers.length >= 3) {
+        redFlags.push({
+            category: 'Game Environment',
+            weight: -1,
+            title: 'Low Team Total Exposure',
+            description: `${lowTeamTotalPlayers.length} players from teams projected <20 points. Limited scoring upside.`
+        });
+    }
+
+    // ============================================================================
+    // WEATHER CHECKS
+    // ============================================================================
+
+    // NEW: RED FLAG - Bad Weather Exposure
+    const badWeatherPlayers = lineupPlayers.filter(p => {
+        const game = p['Game Info'] ? p['Game Info'].split(' ')[0] : '';
+        if (!game || !weatherData[game]) return false;
+        const conditions = (weatherData[game].conditions || '').toLowerCase();
+        return ['QB', 'WR', 'TE'].includes(p.position) && (conditions.includes('rain') || conditions.includes('snow'));
+    });
+    if (badWeatherPlayers.length > 0) {
+        redFlags.push({
+            category: 'Weather',
+            weight: -1,
+            title: 'Bad Weather Exposure',
+            description: `${badWeatherPlayers.length} skill player(s) in rain/snow: ${badWeatherPlayers.map(p => p.name).join(', ')}. Passing production drops 12-25% in bad weather.`
+        });
+    }
+
+    // NEW: GREEN FLAG - Dome/Indoor Game Stack
+    if (qb) {
+        const qbGame = qb['Game Info'] ? qb['Game Info'].split(' ')[0] : '';
+        if (qbGame && weatherData[qbGame]?.indoor) {
+            const qbTeammates = lineupPlayers.filter(p =>
+                p.team === qb.team && p.position !== 'QB' && ['WR', 'TE'].includes(p.position)
+            );
+            if (qbTeammates.length >= 2) {
+                greenFlags.push({
+                    category: 'Weather',
+                    weight: 0.5,
+                    title: 'Dome/Indoor Game Stack',
+                    description: `Your QB stack (${qb.name} + teammates) is in a dome/indoor game. No weather concerns!`
+                });
+            }
+        }
+    }
+
+    // ============================================================================
+    // QUALITY & VALUE METRICS
+    // ============================================================================
+
+    // Expensive Defense
+    if (dst && dst.salary > 3500) {
+        redFlags.push({
+            category: 'Construction',
+            weight: -0.5,
+            title: 'Expensive Defense',
+            description: `Your defense costs $${dst.salary.toLocaleString()}. Defenses are volatile - consider downgrading to add value elsewhere.`
+        });
+    }
+
+    // NEW: RED FLAG - Low DFS Score Lineup
+    const validScores = lineupPlayers.filter(p => p.dfsScore !== undefined);
+    if (validScores.length > 0) {
+        const avgDFSScore = validScores.reduce((sum, p) => sum + p.dfsScore, 0) / validScores.length;
+        if (avgDFSScore < 55) {
+            redFlags.push({
+                category: 'Quality',
+                weight: -1,
+                title: 'Low DFS Score Lineup',
+                description: `Average DFS score is ${avgDFSScore.toFixed(1)}/100. This lineup has weak overall construction.`
+            });
+        }
+
+        // NEW: GREEN FLAG - Elite DFS Score Concentration
+        const eliteScores = lineupPlayers.filter(p => p.dfsScore >= 75);
+        if (eliteScores.length >= 3) {
+            greenFlags.push({
+                category: 'Quality',
+                weight: 1,
+                title: 'Elite DFS Score Concentration',
+                description: `${eliteScores.length} players with DFS score ≥75. Elite value+matchup combination!`
+            });
+        }
+    }
+
+    // NEW: GREEN FLAG - High-Value Leverage Play
+    const leveragePlays = lineupPlayers.filter(p => p.mppk > 4.0 && p.salary > 5000);
+    if (leveragePlays.length > 0) {
+        greenFlags.push({
+            category: 'Quality',
+            weight: 0.5,
+            title: 'High-Value Leverage Play',
+            description: `${leveragePlays.length} mispriced stud(s): ${leveragePlays.map(p => `${p.name} (${p.mppk.toFixed(2)} MPPK)`).join(', ')}. Great value at medium-high price!`
         });
     }
 
@@ -1181,41 +1460,86 @@ function analyzeLineup() {
     displayAnalysisResults(redFlags, greenFlags);
 }
 
-// Display analysis results
+// Display analysis results - ENHANCED VERSION with categorization and weighted scoring
 function displayAnalysisResults(redFlags, greenFlags) {
     const resultsDiv = document.getElementById('analysisResults');
 
-    // Calculate score (green flags add points, red flags subtract)
-    const score = Math.max(0, Math.min(10, 5 + greenFlags.length - redFlags.length));
+    // Calculate weighted score
+    const redScore = redFlags.reduce((sum, flag) => sum + (flag.weight || -1), 0);
+    const greenScore = greenFlags.reduce((sum, flag) => sum + (flag.weight || 1), 0);
+    const rawScore = 5 + greenScore + redScore; // Start at 5, add green, subtract red
+    const score = Math.max(0, Math.min(10, rawScore));
+
+    // Group flags by category
+    const groupedRed = {};
+    const groupedGreen = {};
+
+    redFlags.forEach(flag => {
+        const cat = flag.category || 'Other';
+        if (!groupedRed[cat]) groupedRed[cat] = [];
+        groupedRed[cat].push(flag);
+    });
+
+    greenFlags.forEach(flag => {
+        const cat = flag.category || 'Other';
+        if (!groupedGreen[cat]) groupedGreen[cat] = [];
+        groupedGreen[cat].push(flag);
+    });
+
+    // Category icons
+    const categoryIcons = {
+        'Construction': '🏗️',
+        'Correlation': '🔗',
+        'Game Environment': '🎮',
+        'Weather': '🌤️',
+        'Quality': '⭐'
+    };
 
     let html = `
         <div class="analysis-header">
             <h3>Lineup Analysis</h3>
             <div class="lineup-score">
                 <span class="score-label">Quality Score:</span>
-                <span class="score-value ${score >= 7 ? 'score-good' : score >= 4 ? 'score-ok' : 'score-bad'}">${score}/10</span>
+                <span class="score-value ${score >= 7 ? 'score-good' : score >= 4 ? 'score-ok' : 'score-bad'}">${score.toFixed(1)}/10</span>
             </div>
         </div>
+        <p style="font-size: 12px; color: #888; margin-top: -10px;">Enhanced analyzer with 26 validation checks</p>
     `;
 
+    // Display red flags by category
     if (redFlags.length > 0) {
         html += '<div class="analysis-section red-flags">';
         html += '<h4>🚨 Issues to Address</h4>';
-        html += '<ul>';
-        redFlags.forEach(flag => {
-            html += `<li><strong>${flag.title}:</strong> ${flag.description}</li>`;
+
+        Object.keys(groupedRed).sort().forEach(category => {
+            const icon = categoryIcons[category] || '📋';
+            html += `<div class="flag-category"><strong>${icon} ${category}</strong></div>`;
+            html += '<ul>';
+            groupedRed[category].forEach(flag => {
+                html += `<li><strong>${flag.title}:</strong> ${flag.description}</li>`;
+            });
+            html += '</ul>';
         });
-        html += '</ul></div>';
+
+        html += '</div>';
     }
 
+    // Display green flags by category
     if (greenFlags.length > 0) {
         html += '<div class="analysis-section green-flags">';
         html += '<h4>✅ Strengths</h4>';
-        html += '<ul>';
-        greenFlags.forEach(flag => {
-            html += `<li><strong>${flag.title}:</strong> ${flag.description}</li>`;
+
+        Object.keys(groupedGreen).sort().forEach(category => {
+            const icon = categoryIcons[category] || '📋';
+            html += `<div class="flag-category"><strong>${icon} ${category}</strong></div>`;
+            html += '<ul>';
+            groupedGreen[category].forEach(flag => {
+                html += `<li><strong>${flag.title}:</strong> ${flag.description}</li>`;
+            });
+            html += '</ul>';
         });
-        html += '</ul></div>';
+
+        html += '</div>';
     }
 
     if (redFlags.length === 0 && greenFlags.length === 0) {
