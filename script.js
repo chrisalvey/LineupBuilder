@@ -66,11 +66,16 @@ async function loadAvailableContests() {
                 return; // Skip invalid contests
             }
 
-            // Parse date and filter out past contests
-            const contestDate = new Date(contest.date);
-            contestDate.setHours(0, 0, 0, 0);
+            // Parse date in local timezone (not UTC) to avoid timezone issues
+            const [year, month, day] = contest.date.split('-');
+            const contestDate = new Date(year, month - 1, day); // month is 0-indexed
 
-            if (contestDate >= today) {
+            // Show contests until the day AFTER they occur
+            // Example: Nov 30 contest shows on Nov 30 and Dec 1, hides on Dec 2
+            const yesterday = new Date(today);
+            yesterday.setDate(yesterday.getDate() - 1);
+
+            if (contestDate >= yesterday) {
                 validatedContests.push(contest);
             }
         });
