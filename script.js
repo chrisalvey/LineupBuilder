@@ -960,16 +960,18 @@ function autoFillLineup() {
     // STEP 1: Calculate Floor Scores for all players
     // ============================================================================
 
-    const scoredPlayers = players.map(player => {
-        const floorScore = calculateFloorScore(player);
-        const valueScore = floorScore / (parseInt(player.Salary) / 1000);
+    const scoredPlayers = players
+        .filter(p => !markedOutPlayers.has(p.ID)) // Exclude marked-out players
+        .map(player => {
+            const floorScore = calculateFloorScore(player);
+            const valueScore = floorScore / (parseInt(player.Salary) / 1000);
 
-        return {
-            ...player,
-            floorScore: floorScore,
-            valueScore: valueScore
-        };
-    });
+            return {
+                ...player,
+                floorScore: floorScore,
+                valueScore: valueScore
+            };
+        });
 
     // ============================================================================
     // STEP 2: Filter players by position-specific criteria
