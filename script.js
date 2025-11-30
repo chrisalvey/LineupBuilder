@@ -935,7 +935,8 @@ function clearLineup() {
     }
 }
 
-// Auto-fill lineup with best value players
+// Auto-fill lineup with CASH GAME optimized strategy - ENHANCED VERSION
+// Focuses on floor, consistency, and volume rather than ceiling
 function autoFillLineup() {
     if (players.length === 0) {
         alert('Please upload a CSV file first');
@@ -955,91 +956,424 @@ function autoFillLineup() {
         currentSalary += player.salary;
     });
 
-    // Sort all players by Overall DFS Score descending
-    const sortedPlayers = [...players].sort((a, b) => (b.dfsScore || 0) - (a.dfsScore || 0));
+    // ============================================================================
+    // STEP 1: Calculate Floor Scores for all players
+    // ============================================================================
 
-    // Count empty slots to calculate remaining slots correctly
-    const emptySlots = positions.filter((_, idx) => !currentLineup[idx]).length;
-    let emptySlotsFilled = 0;
+    const scoredPlayers = players.map(player => {
+        const floorScore = calculateFloorScore(player);
+        const valueScore = floorScore / (parseInt(player.Salary) / 1000);
 
-    // Fill each position slot
-    for (let slotIndex = 0; slotIndex < positions.length; slotIndex++) {
-        // Skip if slot is already filled
-        if (currentLineup[slotIndex]) {
-            continue;
-        }
+        return {
+            ...player,
+            floorScore: floorScore,
+            valueScore: valueScore
+        };
+    });
 
-        const slotPosition = positions[slotIndex];
-        const remainingSalary = salaryCap - currentSalary;
-        const remainingEmptySlots = emptySlots - emptySlotsFilled;
-        const maxSalaryForSlot = remainingSalary - (remainingEmptySlots - 1) * 3000; // Reserve min $3k per remaining slot
+    // ============================================================================
+    // STEP 2: Filter players by position-specific criteria
+    // ============================================================================
 
-        // Find best available player for this position
-        let bestPlayer = null;
+    const filteredByPosition = {
+        QB: filterQBs(scoredPlayers),
+        RB: filterRBs(scoredPlayers),
+        WR: filterWRs(scoredPlayers),
+        TE: filterTEs(scoredPlayers),
+        DST: filterDSTs(scoredPlayers)
+    };
 
-        for (const player of sortedPlayers) {
-            // Skip if already used
-            if (usedPlayerIds.has(player.ID)) continue;
+    // ============================================================================
+    // STEP 3: Build lineup in optimal order (RB → QB → WR → TE → FLEX → DST)
+    // ============================================================================
 
-            const playerSalary = parseInt(player.Salary) || 0;
+    const buildOrder = [
+        { position: 'RB', count: 2 },
+        { position: 'QB', count: 1 },
+        { position: 'WR', count: 3 },
+        { position: 'TE', count: 1 },
+        { position: 'FLEX', count: 1 },
+        { position: 'DST', count: 1 }
+    ];
 
-            // Skip if too expensive
-            if (playerSalary > maxSalaryForSlot) continue;
+    // Map position slots to indices
+    const positionSlots = {};
+    positions.forEach((pos, idx) => {
+        if (!positionSlots[pos]) positionSlots[pos] = [];
+        positionSlots[pos].push(idx);
+    });
 
-            // Check position eligibility
-            let eligible = false;
+    let filled = 0;
 
-            if (slotPosition === 'CPT') {
-                // Captain can be any position
-                eligible = true;
-            } else if (slotPosition === 'FLEX') {
-                // FLEX can be RB/WR/TE in classic, or any in showdown
-                eligible = config.flexEligible.includes(player.Position);
+    buildOrder.forEach(({ position, count }) => {
+        const slotsForPosition = positionSlots[position] || [];
+        let positionFilled = 0;
+
+        for (const slotIdx of slotsForPosition) {
+            // Skip if slot already filled
+            if (currentLineup[slotIdx]) continue;
+            if (positionFilled >= count) break;
+
+            const remainingSalary = salaryCap - currentSalary;
+            const remainingSlots = positions.length - Object.keys(currentLineup).length;
+            const minSalaryReserve = (remainingSlots - 1) * 3000;
+            const maxSalaryForSlot = remainingSalary - minSalaryReserve;
+
+            let bestPlayer = null;
+
+            if (position === 'FLEX') {
+                // FLEX: Best floor play among RB/WR/TE
+                bestPlayer = findBestFlexPlayer(filteredByPosition, usedPlayerIds, maxSalaryForSlot);
             } else {
-                // Must match exact position
-                eligible = player.Position === slotPosition;
+                // Regular position: Find best floor score
+                const pool = filteredByPosition[position] || [];
+
+                for (const player of pool) {
+                    if (usedPlayerIds.has(player.ID)) continue;
+                    if (parseInt(player.Salary) > maxSalaryForSlot) continue;
+
+                    bestPlayer = player;
+                    break; // Take first (highest floor score)
+                }
             }
 
-            if (eligible) {
-                bestPlayer = player;
-                break;
+            if (bestPlayer) {
+                const playerSalary = parseInt(bestPlayer.Salary);
+
+                currentLineup[slotIdx] = {
+                    name: bestPlayer.Name,
+                    id: bestPlayer.ID,
+                    position: bestPlayer.Position,
+                    salary: playerSalary,
+                    team: bestPlayer.TeamAbbrev || '',
+                    avgPoints: bestPlayer.AvgPointsPerGame || '0',
+                    isCaptain: false
+                };
+
+                usedPlayerIds.add(bestPlayer.ID);
+                currentSalary += playerSalary;
+                positionFilled++;
+                filled++;
+                updateLineupDisplay(slotIdx);
             }
         }
+    });
 
-        // Add player to lineup if found
-        if (bestPlayer) {
-            const playerSalary = parseInt(bestPlayer.Salary) || 0;
+    // ============================================================================
+    // STEP 4: Salary optimization - Use remaining cap to upgrade
+    // ============================================================================
 
-            currentLineup[slotIndex] = {
-                name: bestPlayer.Name,
-                id: bestPlayer.ID,
-                position: bestPlayer.Position,
-                salary: playerSalary,
-                team: bestPlayer.TeamAbbrev || '',
-                avgPoints: bestPlayer.AvgPointsPerGame || '0',
-                isCaptain: slotPosition === 'CPT'
-            };
-
-            usedPlayerIds.add(bestPlayer.ID);
-            currentSalary += playerSalary;
-            emptySlotsFilled++;
-            updateLineupDisplay(slotIndex);
-        }
+    const remainingSalary = salaryCap - currentSalary;
+    if (remainingSalary >= 500 && filled > 0) {
+        optimizeSalaryUsage(filteredByPosition, usedPlayerIds, remainingSalary);
     }
 
     updateSalaryDisplay();
 
-    // Alert if lineup is incomplete
-    const filledSlots = Object.keys(currentLineup).length;
+    // Alert results
     const totalSlots = positions.length;
+    const filledSlots = Object.keys(currentLineup).length;
 
-    if (emptySlotsFilled > 0) {
-        // Show success message if we filled any slots
+    if (filled > 0) {
         if (filledSlots < totalSlots) {
-            alert(`Auto-fill added ${emptySlotsFilled} player${emptySlotsFilled !== 1 ? 's' : ''}. ${totalSlots - filledSlots} position${totalSlots - filledSlots !== 1 ? 's' : ''} still empty.`);
+            alert(`Auto-fill added ${filled} player${filled !== 1 ? 's' : ''}. ${totalSlots - filledSlots} position${totalSlots - filledSlots !== 1 ? 's' : ''} still empty.`);
+        } else {
+            alert(`✅ Lineup complete! Using $${currentSalary.toLocaleString()} of $${salaryCap.toLocaleString()} (${((currentSalary/salaryCap)*100).toFixed(1)}%)`);
         }
     } else if (filledSlots < totalSlots) {
         alert(`Could not auto-fill any positions. Try adjusting salary constraints or check available players.`);
+    }
+}
+
+// ============================================================================
+// FLOOR SCORE CALCULATION
+// ============================================================================
+
+function calculateFloorScore(player) {
+    // Floor Score = (Projected Points * 0.40) + (Volume * 0.30) + (Consistency * 0.20) + (Bonus Proximity * 0.10)
+
+    const projectedPoints = parseFloat(player.AvgPointsPerGame) || 0;
+    const volumeScore = calculateVolumeScore(player);
+    const consistencyScore = 0.7; // Default - would need game log data for real variance calc
+    const bonusProximity = calculateBonusProximity(player);
+
+    const floorScore = (
+        (projectedPoints * 0.40) +
+        (volumeScore * 0.30) +
+        (consistencyScore * 0.20) +
+        (bonusProximity * 0.10)
+    );
+
+    return floorScore;
+}
+
+function calculateVolumeScore(player) {
+    // Normalize volume metrics by position
+    // Higher volume = more consistent floor
+
+    const pos = player.Position;
+    const avgPoints = parseFloat(player.AvgPointsPerGame) || 0;
+
+    // Estimate volume from average points (proxy until we have targets/carries data)
+    // QB: 35+ attempts = high volume
+    // RB: 18+ touches = high volume
+    // WR/TE: 7+ targets = high volume
+
+    if (pos === 'QB') {
+        // QBs averaging 18+ points likely throwing 35+ times
+        return avgPoints >= 18 ? 8 : avgPoints >= 15 ? 6 : 4;
+    } else if (pos === 'RB') {
+        // RBs averaging 12+ points likely getting 18+ touches
+        return avgPoints >= 12 ? 8 : avgPoints >= 9 ? 6 : 4;
+    } else if (pos === 'WR') {
+        // WRs averaging 12+ points likely getting 7+ targets
+        return avgPoints >= 12 ? 8 : avgPoints >= 9 ? 6 : 4;
+    } else if (pos === 'TE') {
+        // TEs averaging 10+ points likely getting 6+ targets
+        return avgPoints >= 10 ? 8 : avgPoints >= 7 ? 6 : 4;
+    }
+
+    return 5; // Default for DST
+}
+
+function calculateBonusProximity(player) {
+    // Players close to 100/300 yard bonuses get boost
+    const avgPoints = parseFloat(player.AvgPointsPerGame) || 0;
+    const pos = player.Position;
+
+    if (pos === 'QB' && avgPoints >= 20) {
+        // Likely approaching 300 yard bonus
+        return 3;
+    } else if (['RB', 'WR', 'TE'].includes(pos) && avgPoints >= 13) {
+        // Likely approaching 100 yard bonus
+        return 3;
+    } else if (avgPoints >= 10) {
+        return 1.5;
+    }
+
+    return 0;
+}
+
+// ============================================================================
+// POSITION-SPECIFIC FILTERS
+// ============================================================================
+
+function filterQBs(players) {
+    // QB Priority: Pass attempts >= 35, Rushing upside, Bonus proximity
+
+    let qbs = players.filter(p => p.Position === 'QB');
+
+    // Apply filters based on strategy
+    qbs = qbs.filter(p => {
+        const avgPoints = parseFloat(p.AvgPointsPerGame) || 0;
+        const salary = parseInt(p.Salary);
+        const impliedTotal = p.impliedTeamTotal || 0;
+
+        // RED FLAGS - Auto exclude
+        if (impliedTotal > 0 && impliedTotal <= 17) return false; // Low team total
+        if (avgPoints < 12 && salary > 5000) return false; // Bad value
+
+        return true;
+    });
+
+    // Sort by floor score descending
+    qbs.sort((a, b) => b.floorScore - a.floorScore);
+
+    return qbs;
+}
+
+function filterRBs(players) {
+    // RB Priority: Workload (carries >= 18), Pass-catching (targets >= 3), Avoid committees
+
+    let rbs = players.filter(p => p.Position === 'RB');
+
+    rbs = rbs.filter(p => {
+        const avgPoints = parseFloat(p.AvgPointsPerGame) || 0;
+        const salary = parseInt(p.Salary);
+        const impliedTotal = p.impliedTeamTotal || 0;
+
+        // RED FLAGS
+        if (impliedTotal > 0 && impliedTotal <= 17) return false;
+        if (avgPoints < 6 && salary > 4500) return false; // Low floor, expensive
+
+        // GREEN FLAGS - Boost score for bellcows
+        if (avgPoints >= 12) {
+            p.floorScore *= 1.1; // Likely bellcow with 18+ touches
+        }
+
+        return true;
+    });
+
+    // Sort by floor score descending
+    rbs.sort((a, b) => b.floorScore - a.floorScore);
+
+    return rbs;
+}
+
+function filterWRs(players) {
+    // WR Priority: Target share >= 22%, Targets >= 7, Slot receivers for floor
+
+    let wrs = players.filter(p => p.Position === 'WR');
+
+    wrs = wrs.filter(p => {
+        const avgPoints = parseFloat(p.AvgPointsPerGame) || 0;
+        const salary = parseInt(p.Salary);
+
+        // RED FLAGS
+        if (avgPoints < 5 && salary > 4000) return false; // Deep threat with low volume
+
+        // GREEN FLAGS - Boost for high-volume receivers
+        if (avgPoints >= 12) {
+            p.floorScore *= 1.05; // Likely 8+ targets
+        }
+
+        return true;
+    });
+
+    // Sort by floor score descending
+    wrs.sort((a, b) => b.floorScore - a.floorScore);
+
+    return wrs;
+}
+
+function filterTEs(players) {
+    // TE Priority: Elite tier (top 3-4) OR punt ($3k-$4k). Avoid mid-tier trap.
+
+    let tes = players.filter(p => p.Position === 'TE');
+
+    tes = tes.filter(p => {
+        const avgPoints = parseFloat(p.AvgPointsPerGame) || 0;
+        const salary = parseInt(p.Salary);
+
+        // AVOID mid-tier trap ($4,500-$5,500)
+        if (salary >= 4500 && salary <= 5500 && avgPoints < 10) {
+            return false; // Mid-tier without elite production
+        }
+
+        // Either elite (10+ avg) or cheap (<= $4000)
+        return avgPoints >= 10 || salary <= 4000;
+    });
+
+    // Sort by floor score descending
+    tes.sort((a, b) => b.floorScore - a.floorScore);
+
+    return tes;
+}
+
+function filterDSTs(players) {
+    // DST Priority: Cheap (<= $3,500), Vegas favorite, Low opponent total
+
+    let dsts = players.filter(p => p.Position === 'DST');
+
+    dsts = dsts.filter(p => {
+        const salary = parseInt(p.Salary);
+
+        // Prefer cheap DSTs
+        if (salary > 3500) {
+            p.floorScore *= 0.8; // Penalize expensive DSTs
+        }
+
+        return true;
+    });
+
+    // Sort by floor score descending
+    dsts.sort((a, b) => b.floorScore - a.floorScore);
+
+    return dsts;
+}
+
+// ============================================================================
+// FLEX SELECTION
+// ============================================================================
+
+function findBestFlexPlayer(filteredByPosition, usedPlayerIds, maxSalary) {
+    // FLEX: Best remaining floor play among RB/WR/TE
+    // Priority order: RB (more consistent) > Slot WR > TE
+
+    const flexPool = [
+        ...(filteredByPosition.RB || []),
+        ...(filteredByPosition.WR || []),
+        ...(filteredByPosition.TE || [])
+    ];
+
+    // Filter available and affordable
+    const available = flexPool.filter(p =>
+        !usedPlayerIds.has(p.ID) && parseInt(p.Salary) <= maxSalary
+    );
+
+    // Sort by floor score
+    available.sort((a, b) => {
+        // Slight preference for RBs in FLEX (more consistent floor)
+        const aScore = a.Position === 'RB' ? b.floorScore * 1.02 : b.floorScore;
+        const bScore = b.Position === 'RB' ? a.floorScore * 1.02 : a.floorScore;
+        return bScore - aScore;
+    });
+
+    return available[0] || null;
+}
+
+// ============================================================================
+// SALARY OPTIMIZATION
+// ============================================================================
+
+function optimizeSalaryUsage(filteredByPosition, usedPlayerIds, remainingSalary) {
+    // Use remaining salary to upgrade lowest floor-score player
+
+    const lineupArray = Object.values(currentLineup);
+    if (lineupArray.length === 0) return;
+
+    // Find player with lowest floor score in current lineup
+    let lowestFloorSlot = null;
+    let lowestFloorScore = Infinity;
+
+    Object.keys(currentLineup).forEach(slotIdx => {
+        const player = currentLineup[slotIdx];
+        const fullPlayer = players.find(p => p.ID === player.id);
+        if (fullPlayer) {
+            const floorScore = calculateFloorScore(fullPlayer);
+            if (floorScore < lowestFloorScore) {
+                lowestFloorScore = floorScore;
+                lowestFloorSlot = slotIdx;
+            }
+        }
+    });
+
+    if (lowestFloorSlot === null) return;
+
+    const currentPlayer = currentLineup[lowestFloorSlot];
+    const position = currentPlayer.position;
+    const currentSalary = currentPlayer.salary;
+    const maxUpgradeSalary = currentSalary + remainingSalary;
+
+    // Find upgrade in same position
+    const pool = filteredByPosition[position] || [];
+    const upgrade = pool.find(p =>
+        !usedPlayerIds.has(p.ID) &&
+        parseInt(p.Salary) > currentSalary &&
+        parseInt(p.Salary) <= maxUpgradeSalary &&
+        p.floorScore > lowestFloorScore
+    );
+
+    if (upgrade) {
+        // Remove old player
+        const oldSalary = currentPlayer.salary;
+        usedPlayerIds.delete(currentPlayer.id);
+
+        // Add upgrade
+        currentLineup[lowestFloorSlot] = {
+            name: upgrade.Name,
+            id: upgrade.ID,
+            position: upgrade.Position,
+            salary: parseInt(upgrade.Salary),
+            team: upgrade.TeamAbbrev || '',
+            avgPoints: upgrade.AvgPointsPerGame || '0',
+            isCaptain: false
+        };
+
+        usedPlayerIds.add(upgrade.ID);
+        updateLineupDisplay(lowestFloorSlot);
+
+        console.log(`Upgraded ${position}: ${currentPlayer.name} ($${oldSalary}) → ${upgrade.Name} ($${upgrade.Salary})`);
     }
 }
 
