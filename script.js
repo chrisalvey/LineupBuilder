@@ -1006,6 +1006,9 @@ function autoFillLineup() {
     });
 
     let filled = 0;
+    let selectedQBTeam = null; // Track QB team for stacking logic
+    const gameConcentration = {}; // Track players per game (e.g., "KC@BUF": 2)
+    const passCatchersByTeam = {}; // Track WR/TE by team for correlation checking
 
     buildOrder.forEach(({ position, count }) => {
         const slotsForPosition = positionSlots[position] || [];
@@ -1024,8 +1027,8 @@ function autoFillLineup() {
             let bestPlayer = null;
 
             if (position === 'FLEX') {
-                // FLEX: Best floor play among RB/WR/TE
-                bestPlayer = findBestFlexPlayer(filteredByPosition, usedPlayerIds, maxSalaryForSlot);
+                // FLEX: Best floor play among RB/WR/TE (with stacking bonus)
+                bestPlayer = findBestFlexPlayer(filteredByPosition, usedPlayerIds, maxSalaryForSlot, selectedQBTeam, gameConcentration, passCatchersByTeam);
             } else {
                 // Regular position: Find best floor score
                 const pool = filteredByPosition[position] || [];
@@ -1034,7 +1037,56 @@ function autoFillLineup() {
                     if (usedPlayerIds.has(player.ID)) continue;
                     if (parseInt(player.Salary) > maxSalaryForSlot) continue;
 
-                    bestPlayer = player;
+                    // Game total filtering: Avoid low-scoring games (<42), prefer high-scoring (>=48)
+                    const gameTotal = parseFloat(player.GameTotal) || 0;
+                    if (position !== 'DST' && gameTotal > 0 && gameTotal < 42) {
+                        continue; // Skip players in low-total games
+                    }
+
+                    // Game concentration: Avoid 4+ players from same game
+                    const game = player.Game || '';
+                    if (game && (gameConcentration[game] || 0) >= 3) {
+                        continue; // Already have 3 players from this game
+                    }
+
+                    // Correlation checking: Avoid multiple pass-catchers from same team without QB
+                    if (['WR', 'TE'].includes(player.Position)) {
+                        const playerTeam = player.TeamAbbrev;
+                        const teamPassCatcherCount = passCatchersByTeam[playerTeam] || 0;
+
+                        // If we already have a pass-catcher from this team and don't have the QB, skip
+                        if (teamPassCatcherCount > 0 && playerTeam !== selectedQBTeam) {
+                            continue; // Negative correlation - avoid
+                        }
+                    }
+
+                    // Calculate effective floor score with QB stacking bonus
+                    let effectiveFloorScore = player.floorScore;
+
+                    // QB Stacking: Boost WR/TE on same team as selected QB
+                    if (selectedQBTeam && ['WR', 'TE'].includes(player.Position) && player.TeamAbbrev === selectedQBTeam) {
+                        effectiveFloorScore *= 1.15; // 15% boost for QB stack
+                    }
+
+                    // Game total boost: Reward high-scoring games (>=48)
+                    if (gameTotal >= 48) {
+                        effectiveFloorScore *= 1.08; // 8% boost for high-total games
+                    }
+
+                    // Weather penalty: Penalize QB/WR/TE in bad weather, boost dome games
+                    if (['QB', 'WR', 'TE'].includes(player.Position)) {
+                        const game = (player['Game Info'] || '').split(' ')[0];
+                        if (game && weatherData[game]) {
+                            const conditions = (weatherData[game].conditions || '').toLowerCase();
+                            if (conditions.includes('rain') || conditions.includes('snow')) {
+                                effectiveFloorScore *= 0.85; // 15% penalty for bad weather
+                            } else if (weatherData[game].indoor) {
+                                effectiveFloorScore *= 1.03; // 3% boost for dome/indoor
+                            }
+                        }
+                    }
+
+                    bestPlayer = { ...player, effectiveFloorScore };
                     break; // Take first (highest floor score)
                 }
             }
@@ -1056,6 +1108,24 @@ function autoFillLineup() {
                 currentSalary += playerSalary;
                 positionFilled++;
                 filled++;
+
+                // Track QB team for stacking
+                if (position === 'QB') {
+                    selectedQBTeam = bestPlayer.TeamAbbrev;
+                }
+
+                // Track pass-catchers by team for correlation checking
+                if (['WR', 'TE'].includes(bestPlayer.Position)) {
+                    const team = bestPlayer.TeamAbbrev;
+                    passCatchersByTeam[team] = (passCatchersByTeam[team] || 0) + 1;
+                }
+
+                // Track game concentration
+                const game = bestPlayer.Game || '';
+                if (game) {
+                    gameConcentration[game] = (gameConcentration[game] || 0) + 1;
+                }
+
                 updateLineupDisplay(slotIdx);
             }
         }
@@ -1288,7 +1358,7 @@ function filterDSTs(players) {
 // FLEX SELECTION
 // ============================================================================
 
-function findBestFlexPlayer(filteredByPosition, usedPlayerIds, maxSalary) {
+function findBestFlexPlayer(filteredByPosition, usedPlayerIds, maxSalary, selectedQBTeam, gameConcentration, passCatchersByTeam) {
     // FLEX: Best remaining floor play among RB/WR/TE
     // Priority order: RB (more consistent) > Slot WR > TE
 
@@ -1299,17 +1369,70 @@ function findBestFlexPlayer(filteredByPosition, usedPlayerIds, maxSalary) {
     ];
 
     // Filter available and affordable
-    const available = flexPool.filter(p =>
-        !usedPlayerIds.has(p.ID) && parseInt(p.Salary) <= maxSalary
-    );
+    const available = flexPool.filter(p => {
+        if (usedPlayerIds.has(p.ID)) return false;
+        if (parseInt(p.Salary) > maxSalary) return false;
 
-    // Sort by floor score
-    available.sort((a, b) => {
-        // Slight preference for RBs in FLEX (more consistent floor)
-        const aScore = a.Position === 'RB' ? b.floorScore * 1.02 : b.floorScore;
-        const bScore = b.Position === 'RB' ? a.floorScore * 1.02 : a.floorScore;
-        return bScore - aScore;
+        // Game total filtering: Avoid low-scoring games (<42)
+        const gameTotal = parseFloat(p.GameTotal) || 0;
+        if (gameTotal > 0 && gameTotal < 42) return false;
+
+        // Game concentration: Avoid 4+ players from same game
+        const game = p.Game || '';
+        if (game && (gameConcentration[game] || 0) >= 3) return false;
+
+        // Correlation checking: Avoid multiple pass-catchers from same team without QB
+        if (['WR', 'TE'].includes(p.Position)) {
+            const playerTeam = p.TeamAbbrev;
+            const teamPassCatcherCount = passCatchersByTeam[playerTeam] || 0;
+
+            // If we already have a pass-catcher from this team and don't have the QB, skip
+            if (teamPassCatcherCount > 0 && playerTeam !== selectedQBTeam) {
+                return false; // Negative correlation - avoid
+            }
+        }
+
+        return true;
     });
+
+    // Calculate effective floor scores with bonuses
+    available.forEach(p => {
+        let effectiveScore = p.floorScore;
+
+        // Slight preference for RBs in FLEX (more consistent floor)
+        if (p.Position === 'RB') {
+            effectiveScore *= 1.02;
+        }
+
+        // QB Stacking: Boost WR/TE on same team as selected QB
+        if (selectedQBTeam && ['WR', 'TE'].includes(p.Position) && p.TeamAbbrev === selectedQBTeam) {
+            effectiveScore *= 1.15; // 15% boost for QB stack
+        }
+
+        // Game total boost: Reward high-scoring games (>=48)
+        const gameTotal = parseFloat(p.GameTotal) || 0;
+        if (gameTotal >= 48) {
+            effectiveScore *= 1.08; // 8% boost for high-total games
+        }
+
+        // Weather penalty: Penalize QB/WR/TE in bad weather, boost dome games
+        if (['QB', 'WR', 'TE'].includes(p.Position)) {
+            const game = (p['Game Info'] || '').split(' ')[0];
+            if (game && weatherData[game]) {
+                const conditions = (weatherData[game].conditions || '').toLowerCase();
+                if (conditions.includes('rain') || conditions.includes('snow')) {
+                    effectiveScore *= 0.85; // 15% penalty for bad weather
+                } else if (weatherData[game].indoor) {
+                    effectiveScore *= 1.03; // 3% boost for dome/indoor
+                }
+            }
+        }
+
+        p.effectiveFloorScore = effectiveScore;
+    });
+
+    // Sort by effective floor score
+    available.sort((a, b) => b.effectiveFloorScore - a.effectiveFloorScore);
 
     return available[0] || null;
 }
