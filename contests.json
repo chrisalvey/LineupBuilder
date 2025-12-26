@@ -23,6 +23,12 @@
       "display": "Red Zone Week 16 - Dec 21, 2025 (Classic)",
       "date": "2025-12-21",
       "type": "classic"
+    },
+    {
+      "file": "2025-12-28-Classic-RedZoneWeek17.csv",
+      "display": "Red Zone Week 17 - Dec 28, 2025 (Classic)",
+      "date": "2025-12-28",
+      "type": "classic"
     }
   ]
 }
