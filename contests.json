@@ -29,6 +29,18 @@
       "display": "Red Zone Week 17 - Dec 28, 2025 (Classic)",
       "date": "2025-12-28",
       "type": "classic"
+    },
+    {
+      "file": "2026-01-03-Classic-RedZoneSaturday.csv",
+      "display": "Red Zone Saturday - Jan 3, 2026 (Classic)",
+      "date": "2026-01-03",
+      "type": "classic"
+    },
+    {
+      "file": "2026-01-04-Classic-RedZoneWeek17.csv",
+      "display": "Red Zone Week 17 - Jan 4, 2026 (Classic)",
+      "date": "2026-01-04",
+      "type": "classic"
     }
   ]
 }
