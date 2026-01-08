@@ -41,6 +41,18 @@
       "display": "Red Zone Week 17 - Jan 4, 2026 (Classic)",
       "date": "2026-01-04",
       "type": "classic"
+    },
+    {
+      "file": "2026-01-10-Classic-RedZoneWildCardSaturday.csv",
+      "display": "Red Zone Wild Card Saturday - Jan 10, 2026 (Classic)",
+      "date": "2026-01-10",
+      "type": "classic"
+    },
+    {
+      "file": "2026-01-11-Classic-RedZoneWildCardSunday.csv",
+      "display": "Red Zone Wild Card Sunday - Jan 11, 2026 (Classic)",
+      "date": "2026-01-11",
+      "type": "classic"
     }
   ]
 }
